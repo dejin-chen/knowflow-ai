@@ -1,5 +1,7 @@
 # KnowFlow AI
 
+[![KnowFlow AI CI](https://github.com/xibeiqiaozhilang-bot/knowflow-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/xibeiqiaozhilang-bot/knowflow-ai/actions/workflows/ci.yml)
+
 ## Docker 启动
 
 准备好 `backend/.env` 中的模型配置后，在项目根目录执行：
