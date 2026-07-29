@@ -219,6 +219,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 ## 中文文档
 
 - [系统架构说明](docs/system_architecture.md)
+- [中文接口文档](docs/api_reference.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)
 - [Agent Router 阶段](docs/stage_07_agent_router.md)
