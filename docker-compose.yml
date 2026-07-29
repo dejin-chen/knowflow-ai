@@ -1,0 +1,38 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      # 只在本机保存模型密钥；该文件已被 Git 忽略。
+      - ./backend/.env
+    environment:
+      APP_ENV: production
+      DATABASE_URL: sqlite:////app/data/knowflow.db
+      UPLOAD_DIR: /app/data/uploads
+      CHROMA_PERSIST_DIR: /app/data/chroma_db
+    ports:
+      - "8000:8000"
+    volumes:
+      # 命名卷让容器删掉后，SQLite、Chroma 和上传原文件仍然保留。
+      - knowflow_data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      # 容器内通过服务名访问后端，而不是访问本机回环地址。
+      API_BASE_URL: http://backend:8000/api
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  knowflow_data:
