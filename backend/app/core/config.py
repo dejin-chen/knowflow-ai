@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     chroma_collection_name: str = "knowflow_chunks"
     embedding_batch_size: int = 32
     retrieval_top_k: int = 3
+    retrieval_candidate_multiplier: int = Field(default=3, ge=1, le=10)
     retrieval_distance_threshold: float = 0.6
     agent_tool_context_characters: int = 10000
 

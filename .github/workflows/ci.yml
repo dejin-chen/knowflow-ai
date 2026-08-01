@@ -48,7 +48,7 @@ jobs:
           python -m pip install -r requirements.txt
 
       - name: 运行后端测试
-        run: python -m pytest
+        run: python -m pytest -W error
 
   frontend-check:
     name: 前端检查

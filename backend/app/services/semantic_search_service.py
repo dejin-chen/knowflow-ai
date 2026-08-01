@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.repositories.document_chunk_repository import DocumentChunkRepository
 from app.services.embedding_service import EmbeddingService
 from app.services.knowledge_base_service import KnowledgeBaseService
@@ -41,12 +42,28 @@ class SemanticSearchService:
     ) -> list[RetrievedChunk]:
         self.knowledge_base_service.get_required_knowledge_base(knowledge_base_id)
         query_embedding = self.embedding_service.embed_texts([query])[0]
+        candidate_top_k = top_k * settings.retrieval_candidate_multiplier
         matches = self.vector_store.search(
             query_embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
-            top_k=top_k,
+            top_k=candidate_top_k,
         )
-        return self._rehydrate_matches(matches, knowledge_base_id)
+        results = self._rehydrate_matches(matches, knowledge_base_id)
+        return self._deduplicate(results)[:top_k]
+
+    @staticmethod
+    def _deduplicate(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:
+        """去除同一文档中的重复正文，同时保留 Chroma 的距离排序。"""
+        unique_chunks: list[RetrievedChunk] = []
+        seen_content: set[tuple[int, str]] = set()
+        for chunk in chunks:
+            normalized_content = " ".join(chunk.content.split()).casefold()
+            deduplication_key = (chunk.document_id, normalized_content)
+            if deduplication_key in seen_content:
+                continue
+            seen_content.add(deduplication_key)
+            unique_chunks.append(chunk)
+        return unique_chunks
 
     def _rehydrate_matches(
         self,

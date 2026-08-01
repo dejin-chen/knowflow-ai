@@ -1,4 +1,4 @@
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models.document_summary import DocumentSummary
@@ -50,3 +50,12 @@ class DocumentSummaryRepository:
         self.db.commit()
         self.db.refresh(summary)
         return summary
+
+    def delete_by_document(self, document_id: int, *, commit: bool = True) -> None:
+        self.db.execute(
+            delete(DocumentSummary).where(DocumentSummary.document_id == document_id)
+        )
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()

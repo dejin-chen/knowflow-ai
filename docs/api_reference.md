@@ -142,7 +142,8 @@ POST /knowledge-bases
 - `204 No Content`：删除成功，无响应正文。
 - `404 Not Found`：知识库不存在。
 
-当前实现会删除关系型数据库中的知识库记录及关联业务数据。
+当前实现会先清理该知识库的 Chroma 向量，再删除关系型数据库中的关联业务数据，
+最后删除上传目录中的原始文件。Chroma 清理失败时返回 `503`，并保留 SQLite 主数据。
 
 ## 6. 文档管理与处理
 
@@ -175,7 +176,6 @@ curl.exe -X POST `
   "filename": "knowflow_demo_handbook.md",
   "file_type": "md",
   "file_size": 5320,
-  "storage_path": "uploads/1/uuid-knowflow_demo_handbook.md",
   "status": "uploaded",
   "created_at": "2026-07-29T16:05:00",
   "summary": null,
@@ -221,7 +221,8 @@ curl.exe -X POST `
 }
 ```
 
-重复调用会替换该文档旧的 Chunk 结果。
+重复调用会先清理该文档旧的 Chroma 向量，再在同一个 SQLite 事务中替换 Chunk，
+同时删除基于旧 Chunk 生成的摘要和 FAQ，最后将文档状态恢复为 `chunked`。
 
 常见错误：
 
@@ -419,6 +420,10 @@ Token 用量。重复调用会更新已有摘要。
 
 `distance` 是 Chroma 返回的余弦距离，通常越小表示语义越接近。
 它不是百分制相似度，不应显示成“78.65% 准确率”。
+
+系统默认先向 Chroma 请求 `top_k × 3` 个候选，回查 SQLite 后，按
+“同一文档 + 规范化正文”去除完全重复内容，再保留最终 Top-K。这样可以避免
+重复 Chunk 占满引用，同时允许不同文档保留相同制度内容作为独立来源。
 
 ## 9. RAG 与 Agent 问答
 

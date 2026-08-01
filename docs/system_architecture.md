@@ -236,7 +236,55 @@ flowchart TD
 
 因此页面上的引用编号可以追溯到真实数据库记录。
 
-## 9. Docker 运行架构
+## 9. RAG 索引生命周期与多存储一致性
+
+SQLite、Chroma 和上传目录不是同一个数据库，无法共享一个 ACID 事务。
+系统因此采用“明确主数据、事务提交、失败补偿和派生数据失效”的策略。
+
+### 文档重新切分
+
+```text
+新文本解析和切分成功
+→ 按 document_id 删除旧 Chroma 向量
+→ 开启 SQLite 事务
+→ 删除旧 vector_indexes 和 document_chunks
+→ 删除基于旧 Chunk 生成的摘要与 FAQ
+→ 插入新 Chunk，并将状态改为 chunked
+→ 提交事务
+```
+
+先完成新文本解析再清理旧数据，避免格式或编码错误导致已有索引被提前删除。
+SQLite 中的替换、派生数据清理和状态更新只提交一次，任一步失败都会回滚。
+
+### 建立向量索引
+
+```text
+生成 Embedding
+→ upsert 到 Chroma
+→ 在一个 SQLite 事务中写 vector_indexes 并更新文档状态
+→ 数据库提交失败时，按 chroma_id 补偿删除本次向量
+```
+
+补偿操作不能达到分布式事务的严格原子性，但能避免大多数“Chroma 已写入、
+SQLite 未记录”的悬空状态，复杂度也适合当前项目规模。
+
+### 删除知识库
+
+```text
+按 knowledge_base_id 清理 Chroma
+→ 删除 SQLite 知识库及关联数据
+→ 在上传根目录安全边界内删除原始文件
+```
+
+如果 Chroma 清理失败，系统不会继续删除 SQLite 主数据。文件清理只允许发生在
+配置的上传根目录中，防止异常 `storage_path` 删除项目之外的文件。
+
+### SQLite 外键
+
+SQLite 默认关闭外键约束。项目在每条数据库连接创建时执行
+`PRAGMA foreign_keys=ON`，同时 Repository 仍显式清理向量映射，形成双重保护。
+
+## 10. Docker 运行架构
 
 ```mermaid
 flowchart LR
@@ -253,7 +301,7 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 访问后端，而浏览器通过宿主机端口访问页面。命名卷负责持久化数据库、
 向量索引和上传文档。
 
-## 10. 可替换边界
+## 11. 可替换边界
 
 ### Chroma 升级 pgvector
 
@@ -273,7 +321,7 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 
 FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue。
 
-## 11. 当前边界
+## 12. 当前边界
 
 - 仅支持 TXT 和 Markdown，尚未实现 PDF 页码解析。
 - 未实现登录、多租户和细粒度知识库权限。
@@ -283,7 +331,7 @@ FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue�
 
 清楚说明边界比把项目包装成“大型企业平台”更适合应届生面试。
 
-## 12. 三分钟面试讲解
+## 13. 三分钟面试讲解
 
 可以按照以下顺序介绍：
 
@@ -292,4 +340,5 @@ FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue�
 3. **问答链路**：问题向量化、知识库过滤、SQLite 回查、Prompt 和引用。
 4. **Agent 能力**：Router 在问答、总结、对比和追问工具之间进行选择。
 5. **工程能力**：FastAPI 分层、SQLAlchemy、pytest、Docker Compose 和 CI。
-6. **设计取舍**：保持轻量和可解释，并说明未来升级 PostgreSQL、pgvector 和 LLM Router 的边界。
+6. **一致性设计**：说明重切分失效、SQLite 事务和 Chroma 失败补偿。
+7. **设计取舍**：保持轻量和可解释，并说明未来升级 PostgreSQL、pgvector 和 LLM Router 的边界。

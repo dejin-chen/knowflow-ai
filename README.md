@@ -15,7 +15,9 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 - TXT、Markdown 文档上传与元信息管理
 - 文本清洗、可配置 Chunk 切分和位置记录
 - OpenAI 兼容 Embedding 接口与 Chroma 向量索引
-- 指定知识库范围内的 Top-K 语义检索
+- 候选扩大召回、同文档重复正文去重与 Top-K 语义检索
+- 文档重处理时同步清理旧向量，并使旧摘要和 FAQ 失效
+- 删除知识库时级联清理 SQLite、Chroma 与上传文件
 - 带引用来源、资料不足判断和会话历史的 RAG 问答
 - 普通问答、文档总结、多文档对比和信息追问的轻量 Agent Router
 - Agent 执行步骤、检索日志和模型 Token 用量记录
@@ -70,8 +72,9 @@ flowchart LR
 用户问题
 → Agent Router 判断意图
 → 问题向量化
-→ Chroma 在指定知识库内召回 Top-K
+→ Chroma 在指定知识库内扩大召回候选
 → 根据 metadata 回查 SQLite 中的 Chunk 和文档来源
+→ 去除同一文档中的重复正文并截取 Top-K
 → 判断检索依据是否充足
 → 构造带编号资料的 RAG Prompt
 → LLM 生成带引用回答
@@ -201,8 +204,10 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-项目现有 24 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
-RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ 和模型用量记录。
+项目现有 29 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
+RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
+多存储一致性。生命周期测试会验证旧向量清理、数据库失败补偿、
+派生数据失效、SQLite 外键和内部路径隐藏。
 
 GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时，
 自动执行后端 pytest 和前端 Python 语法检查。详见
@@ -212,6 +217,9 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 
 - Router 第一版使用显式规则，便于初学者观察、测试和解释；后续可替换为 LLM 分类。
 - SQLite 与 Chroma 分工存储，避免把业务正文完全绑定到某一种向量数据库。
+- SQLite 内部变更使用事务；Chroma 写入后若数据库失败，则执行补偿删除。
+- 文档重切分会使向量、摘要和 FAQ 一起失效，避免使用旧 Chunk 派生结果。
+- 检索先扩大候选集再去重，避免重复正文占满最终 Top-K。
 - RAG 在最佳检索距离超过阈值时直接返回“知识库中没有足够依据”，减少无依据回答。
 - 摘要、FAQ 和多文档对比会调用 LLM；普通语义检索只调用 Embedding。
 - 项目暂不加入复杂权限、多租户和多 Agent 编排，优先保证完整性与可讲解性。
@@ -220,6 +228,8 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 
 - [系统架构说明](docs/system_architecture.md)
 - [中文接口文档](docs/api_reference.md)
+- [RAG 工程加固](docs/stage_09_rag_hardening.md)
+- [简历与面试讲解](docs/resume_project_guide.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)
 - [Agent Router 阶段](docs/stage_07_agent_router.md)
@@ -232,4 +242,4 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - 增加 PostgreSQL + pgvector 迁移方案
 - 补充用户登录与知识库访问控制
 - 增加检索质量评估数据集
-- 完成接口说明、简历项目描述和面试讲解稿
+- 增加上传文件大小限制和后台异步处理队列

@@ -14,6 +14,14 @@ from app.services.document_service import DocumentService
 from app.services.knowledge_base_service import KnowledgeBaseService
 
 
+class FakeVectorStore:
+    def __init__(self) -> None:
+        self.deleted_document_ids: list[int] = []
+
+    def delete_by_document(self, document_id: int) -> None:
+        self.deleted_document_ids.append(document_id)
+
+
 def test_process_document_into_chunks(tmp_path) -> None:
     engine = create_engine("sqlite:///:memory:", future=True)
     testing_session = sessionmaker(bind=engine)
@@ -37,7 +45,8 @@ def test_process_document_into_chunks(tmp_path) -> None:
             DocumentService(db).upload_document(knowledge_base.id, upload_file)
         )
 
-        chunk_service = DocumentChunkService(db)
+        vector_store = FakeVectorStore()
+        chunk_service = DocumentChunkService(db, vector_store=vector_store)
         chunks = chunk_service.process_document(document.id)
         stored_chunks = chunk_service.list_chunks(document.id)
 
@@ -46,5 +55,6 @@ def test_process_document_into_chunks(tmp_path) -> None:
         assert stored_chunks[0].document_id == document.id
         assert stored_chunks[0].knowledge_base_id == knowledge_base.id
         assert document.status == "chunked"
+        assert vector_store.deleted_document_ids == [document.id]
     finally:
         db.close()

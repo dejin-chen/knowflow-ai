@@ -43,8 +43,17 @@ class DocumentRepository:
     def get_by_id(self, document_id: int) -> Document | None:
         return self.db.get(Document, document_id)
 
-    def update_status(self, document: Document, status: str) -> Document:
+    def update_status(
+        self,
+        document: Document,
+        status: str,
+        *,
+        commit: bool = True,
+    ) -> Document:
         document.status = status
-        self.db.commit()
-        self.db.refresh(document)
+        if commit:
+            self.db.commit()
+            self.db.refresh(document)
+        else:
+            self.db.flush()
         return document

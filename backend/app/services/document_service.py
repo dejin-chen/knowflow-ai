@@ -83,7 +83,6 @@ class DocumentService:
                 "filename": document.filename,
                 "file_type": document.file_type,
                 "file_size": document.file_size,
-                "storage_path": document.storage_path,
                 "status": document.status,
                 "created_at": document.created_at,
                 "summary": summaries_by_document_id.get(document.id),

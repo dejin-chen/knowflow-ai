@@ -55,3 +55,10 @@ class DocumentFaqRepository:
         for faq in faqs:
             self.db.refresh(faq)
         return faqs
+
+    def delete_by_document(self, document_id: int, *, commit: bool = True) -> None:
+        self.db.execute(delete(DocumentFaq).where(DocumentFaq.document_id == document_id))
+        if commit:
+            self.db.commit()
+        else:
+            self.db.flush()

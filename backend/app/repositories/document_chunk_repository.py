@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.models.document import Document
 from app.models.document_chunk import DocumentChunk
+from app.models.vector_index import VectorIndex
 
 if TYPE_CHECKING:
     from app.services.text_splitter_service import TextChunk
@@ -21,11 +22,22 @@ class DocumentChunkRepository:
         document_id: int,
         knowledge_base_id: int,
         chunks: list["TextChunk"],
+        *,
+        commit: bool = True,
     ) -> list[DocumentChunk]:
         """替换某篇文档已有的 Chunk，保证重复处理不会产生重复记录。"""
-        self.db.execute(
-            delete(DocumentChunk).where(DocumentChunk.document_id == document_id)
-        )
+        old_chunks = self.list_by_document(document_id)
+        if old_chunks:
+            # 显式删除映射，避免 SQLite 未启用外键时留下孤立 vector_indexes。
+            self.db.execute(
+                delete(VectorIndex)
+                .where(VectorIndex.chunk_id.in_([chunk.id for chunk in old_chunks]))
+                .execution_options(synchronize_session=False)
+            )
+            # 让 ORM 正确维护 identity map，避免 SQLite 复用主键时混淆新旧对象。
+            for old_chunk in old_chunks:
+                self.db.delete(old_chunk)
+            self.db.flush()
 
         records = [
             DocumentChunk(
@@ -40,9 +52,11 @@ class DocumentChunkRepository:
             for chunk in chunks
         ]
         self.db.add_all(records)
-        self.db.commit()
-        for record in records:
-            self.db.refresh(record)
+        self.db.flush()
+        if commit:
+            self.db.commit()
+            for record in records:
+                self.db.refresh(record)
         return records
 
     def list_by_document(self, document_id: int) -> list[DocumentChunk]:

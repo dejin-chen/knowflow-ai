@@ -12,7 +12,12 @@ class VectorIndexRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def upsert_many(self, mappings: list[tuple[int, str]]) -> list[VectorIndex]:
+    def upsert_many(
+        self,
+        mappings: list[tuple[int, str]],
+        *,
+        commit: bool = True,
+    ) -> list[VectorIndex]:
         """写入 Chunk 与 Chroma ID 的映射，重复索引时更新已有记录。"""
         if not mappings:
             return []
@@ -36,7 +41,9 @@ class VectorIndexRepository:
                 record.last_error = None
             records.append(record)
 
-        self.db.commit()
-        for record in records:
-            self.db.refresh(record)
+        self.db.flush()
+        if commit:
+            self.db.commit()
+            for record in records:
+                self.db.refresh(record)
         return records

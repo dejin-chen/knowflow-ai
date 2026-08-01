@@ -63,6 +63,44 @@ class ChromaVectorStoreService:
 
         return chroma_ids
 
+    def delete_by_document(self, document_id: int) -> None:
+        """文档重新切分或删除前，清理它在 Chroma 中的旧向量。"""
+        self._delete(
+            where={"document_id": document_id},
+            error_detail="Chroma 文档向量清理失败",
+        )
+
+    def delete_by_knowledge_base(self, knowledge_base_id: int) -> None:
+        """删除知识库前清理全部关联向量，避免残留 metadata。"""
+        self._delete(
+            where={"knowledge_base_id": knowledge_base_id},
+            error_detail="Chroma 知识库向量清理失败",
+        )
+
+    def delete_by_ids(self, chroma_ids: list[str]) -> None:
+        """数据库提交失败时，补偿删除本次已经写入的向量。"""
+        if not chroma_ids:
+            return
+        self._delete(
+            ids=chroma_ids,
+            error_detail="Chroma 向量补偿清理失败",
+        )
+
+    def _delete(
+        self,
+        *,
+        error_detail: str,
+        ids: list[str] | None = None,
+        where: dict[str, int] | None = None,
+    ) -> None:
+        try:
+            self.collection.delete(ids=ids, where=where)
+        except Exception as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=error_detail,
+            ) from error
+
     def search(
         self,
         query_embedding: list[float],
