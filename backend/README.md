@@ -2,6 +2,9 @@
 
 后端使用 FastAPI 搭建，负责提供知识库、文档管理、检索问答和执行日志等 API。
 
+当前后端已形成完整 RAG 与轻量 Agent 链路，支持 TXT、Markdown、文本型 PDF、
+流式上传、Chroma 检索、带引用问答、离线评估、请求追踪和依赖就绪检查。
+
 第一阶段只实现工程化基础能力：
 
 - 应用配置
@@ -31,6 +34,18 @@ uvicorn app.main:app --reload
 ```powershell
 pytest
 ```
+
+## 离线检索评估
+
+```powershell
+python scripts/evaluate_retrieval.py `
+  --knowledge-base-id 1 `
+  --dataset ..\evaluation\retrieval_dataset.example.json `
+  --min-hit-rate 0.8
+```
+
+脚本会调用真实 Embedding 和 Chroma 检索，输出 Hit Rate@K、MRR 与关键词召回率。
+知识库需要提前上传并索引与评估集匹配的文档。
 
 ## 目录职责
 

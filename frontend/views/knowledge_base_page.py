@@ -48,8 +48,8 @@ def render_knowledge_base_page(
 
     st.subheader(f"上传文档：{selected_knowledge_base['name']}")
     uploaded_file = st.file_uploader(
-        "选择 TXT 或 Markdown 文档",
-        type=["txt", "md", "markdown"],
+        "选择 TXT、Markdown 或 PDF 文档",
+        type=["txt", "md", "markdown", "pdf"],
     )
     if st.button("上传文档", disabled=uploaded_file is None):
         try:

@@ -16,7 +16,7 @@ services:
       # 命名卷让容器删掉后，SQLite、Chroma 和上传原文件仍然保留。
       - knowflow_data:/app/data
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready')"]
       interval: 10s
       timeout: 5s
       retries: 5

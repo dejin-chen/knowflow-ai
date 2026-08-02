@@ -102,10 +102,10 @@ sequenceDiagram
     participant VS as Chroma
     participant DB as SQLite
 
-    U->>API: 上传 TXT / Markdown
+    U->>API: 上传 TXT / Markdown / PDF
     API->>DS: upload_document()
     DS->>DB: 保存 documents 元信息
-    DS->>DS: 将原文件写入 uploads
+    DS->>DS: 分块写入 uploads 并限制大小
     U->>API: 请求处理文档
     API->>CS: process_document()
     CS->>CS: 解析、清洗、按 overlap 切分
@@ -124,6 +124,9 @@ sequenceDiagram
 `vector_indexes` 记录 SQLite Chunk 与 Chroma 记录之间的映射。
 如果未来把 Chroma 替换为 pgvector，原始文档、Chunk 正文和业务关系仍在
 SQLite/PostgreSQL 中，不需要重新设计整个文档数据模型。
+
+文本型 PDF 使用 pypdf 逐页提取正文，并插入页码标记后再进入统一清洗和切分流程。
+扫描件只有图片而没有文本层，当前会明确拒绝，不把空内容写入数据库。
 
 ## 5. RAG 问答流程
 
@@ -301,7 +304,15 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 访问后端，而浏览器通过宿主机端口访问页面。命名卷负责持久化数据库、
 向量索引和上传文档。
 
-## 11. 可替换边界
+## 11. 可观测性与离线评估
+
+- HTTP 中间件为每次请求生成或透传 `X-Request-ID`，并记录路径、状态码与耗时。
+- `/health` 是存活检查；`/health/ready` 还会执行 SQLite 查询和 Chroma heartbeat。
+- 模型客户端设置请求超时和有限重试，连接或超时错误转换为 `503`。
+- 离线评估集用预期文件名和关键事实词标注，不依赖会随重切分变化的 Chunk ID。
+- 评估输出 Hit Rate@K、MRR 和关键词召回率，用于比较 Chunk、Top-K、Embedding 或 Rerank 调整前后的效果。
+
+## 12. 可替换边界
 
 ### Chroma 升级 pgvector
 
@@ -321,17 +332,17 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 
 FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue。
 
-## 12. 当前边界
+## 13. 当前边界
 
-- 仅支持 TXT 和 Markdown，尚未实现 PDF 页码解析。
+- PDF 仅支持带文本层的文件，尚未实现 OCR 和结构化表格解析。
 - 未实现登录、多租户和细粒度知识库权限。
-- 未实现混合检索、Rerank 和系统化检索评估。
+- 已有小规模离线检索评估，尚未实现 BM25 混合检索、Rerank 和大规模标注集。
 - SQLite + Chroma 适合本地演示，不代表高并发生产部署方案。
 - Router 是单次决策，不包含完整 ReAct 循环和自主反思。
 
 清楚说明边界比把项目包装成“大型企业平台”更适合应届生面试。
 
-## 13. 三分钟面试讲解
+## 14. 三分钟面试讲解
 
 可以按照以下顺序介绍：
 

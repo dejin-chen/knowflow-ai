@@ -13,6 +13,7 @@ from app.api.semantic_search import router as semantic_search_router
 from app.api.vector_indexes import router as vector_index_router
 from app.core.config import settings
 from app.core.logging import setup_logging
+from app.core.request_observability import request_observability_middleware
 from app.db.base import Base
 from app.db.session import engine
 from app import models
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
         version=settings.app_version,
         lifespan=lifespan,
     )
+    app.middleware("http")(request_observability_middleware)
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(knowledge_base_router, prefix=settings.api_prefix)
     app.include_router(document_router, prefix=settings.api_prefix)

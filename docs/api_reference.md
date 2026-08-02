@@ -10,6 +10,7 @@
 | Swagger UI | `http://127.0.0.1:8000/docs` |
 | OpenAPI JSON | `http://127.0.0.1:8000/openapi.json` |
 | 健康检查 | `http://127.0.0.1:8000/api/health` |
+| 就绪检查 | `http://127.0.0.1:8000/api/health/ready` |
 
 Swagger UI 适合直接查看 Schema 和调试接口，本文件重点解释接口在业务流程中的作用。
 
@@ -21,6 +22,7 @@ Swagger UI 适合直接查看 Schema 和调试接口，本文件重点解释接�
 - 上传文档使用 `multipart/form-data`，表单字段名为 `file`。
 - 时间字段使用 ISO 8601 格式，例如 `2026-07-29T16:00:00`。
 - 资源 ID 是 SQLite 自增整数。
+- 每个响应都包含 `X-Request-ID`。客户端传入合法值时后端沿用，否则自动生成，便于关联日志。
 
 ### 错误结构
 
@@ -52,6 +54,7 @@ POST /knowledge-bases
 | 方法 | 路径 | 作用 |
 | --- | --- | --- |
 | GET | `/health` | 健康检查 |
+| GET | `/health/ready` | 检查 SQLite 与 Chroma 是否就绪 |
 | POST | `/knowledge-bases` | 创建知识库 |
 | GET | `/knowledge-bases` | 获取知识库列表 |
 | DELETE | `/knowledge-bases/{knowledge_base_id}` | 删除知识库 |
@@ -90,6 +93,23 @@ POST /knowledge-bases
 ```
 
 健康检查只证明 Web 应用能够响应，不代表模型 API 一定可用。
+
+### `GET /api/health/ready`
+
+检查 API 当前能否访问 SQLite 和 Chroma。两个依赖都正常时返回：
+
+```json
+{
+  "status": "ready",
+  "checks": {
+    "database": "ok",
+    "vector_store": "ok"
+  }
+}
+```
+
+依赖异常时返回 `503`。Docker Compose 使用该接口判断后端是否可以接收业务请求。
+外部模型 API 不进入就绪检查，避免临时网络波动让整个后端被容器编排器反复重启。
 
 ## 5. 知识库管理
 
@@ -166,6 +186,10 @@ curl.exe -X POST `
 - `.txt`
 - `.md`
 - `.markdown`
+- `.pdf`（文本型 PDF）
+
+后端使用固定大小的数据块流式写入磁盘，不会先把整个上传文件读入内存。默认上限为
+10 MB，可通过 `MAX_UPLOAD_SIZE_MB` 调整；写入失败、文件为空或超限时会清理未完成文件。
 
 响应状态：`201 Created`
 
@@ -185,8 +209,9 @@ curl.exe -X POST `
 
 常见错误：
 
-- `400`：文件为空，或不是 TXT/Markdown。
+- `400`：文件为空，或不是 TXT/Markdown/PDF。
 - `404`：目标知识库不存在。
+- `413`：文件超过配置的上传大小上限。
 
 ### 获取知识库文档
 
@@ -202,7 +227,7 @@ curl.exe -X POST `
 
 ```text
 读取原始文件
-→ 使用 UTF-8 或 GB18030 解码
+→ 文本文件使用 UTF-8 或 GB18030 解码；PDF 逐页提取文本
 → 清洗文本
 → 按 chunk_size 和 chunk_overlap 切分
 → 保存 document_chunks
@@ -223,6 +248,9 @@ curl.exe -X POST `
 
 重复调用会先清理该文档旧的 Chroma 向量，再在同一个 SQLite 事务中替换 Chunk，
 同时删除基于旧 Chunk 生成的摘要和 FAQ，最后将文档状态恢复为 `chunked`。
+
+PDF 解析会在正文中插入“第 N 页”标记，后续 Chunk 和引用可以保留页码线索。
+扫描版 PDF 没有可提取文本时返回 `400`，当前版本不做 OCR。
 
 常见错误：
 
@@ -282,8 +310,8 @@ curl.exe -X POST `
 - `400`：文档尚未切分。
 - `404`：文档不存在。
 - `500`：没有配置 Embedding API Key。
-- `502`：Embedding 模型调用失败。
-- `503`：Chroma 写入失败。
+- `502`：Embedding 模型返回上游错误。
+- `503`：Chroma 写入失败，或模型连接/请求超时。
 
 ## 7. 文档摘要与 FAQ
 
@@ -609,10 +637,11 @@ Router 可能返回四种 `intent`：
 | `400` | 请求内容不符合业务要求 | 文件类型错误、空文件、未切分就建索引 |
 | `404` | 资源不存在 | 知识库、文档、会话或助手消息不存在 |
 | `409` | 当前资源状态不允许操作 | 未切分就生成摘要、未生成摘要就生成 FAQ |
+| `413` | 请求体过大 | 上传文档超过配置上限 |
 | `422` | Pydantic 参数校验失败 | 问题为空、Top-K 超出范围 |
 | `500` | 服务端配置不完整 | 没有配置聊天或 Embedding API Key |
 | `502` | 上游模型调用或输出错误 | 模型请求失败、FAQ 结构不符合要求 |
-| `503` | 本地依赖暂时不可用 | Chroma 写入或检索失败 |
+| `503` | 依赖暂时不可用 | SQLite/Chroma 异常，或模型连接和请求超时 |
 
 ## 13. 初学者应理解的数据流
 

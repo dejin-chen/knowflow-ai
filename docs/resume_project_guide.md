@@ -10,16 +10,18 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ## 2. 简历项目描述
 
-推荐使用下面四条，根据简历空间删减：
+推荐使用下面五条，根据简历空间保留 3 到 5 条：
 
 1. 基于 FastAPI、Streamlit、SQLAlchemy 和 Chroma 独立开发企业知识库 RAG
    问答平台，完成知识库管理、文档切分、Embedding、语义检索、带引用问答和会话持久化，
-   提供 18 个 API 接口与中文演示页面。
+   支持 TXT、Markdown 和文本型 PDF，提供 19 个 API 操作与中文演示页面。
 2. 设计轻量 Agent Router，通过结构化意图在知识问答、文档总结、多文档对比和信息追问
    4 类工具之间路由，并持久化 Agent 执行步骤、检索日志和模型 Token 用量。
 3. 实现 RAG 索引生命周期治理，在文档重处理和知识库删除场景下联动清理 SQLite、
    Chroma 与原始文件；使用事务、失败补偿和派生数据失效机制降低悬空向量与过期引用风险。
-4. 使用 pytest 建立 29 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
+4. 建立可版本化的离线检索评估集，计算 Hit Rate@K、MRR 和关键词召回率；实现流式上传、
+   文件大小限制、请求 ID、依赖就绪检查及模型超时保护，增强异常场景可诊断性。
+5. 使用 pytest 建立 39 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
    配置 GitHub Actions 在主分支推送和 Pull Request 时自动执行后端测试与前端检查。
 
 ### 精简版本
@@ -28,8 +30,8 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 > 基于 FastAPI、Streamlit、SQLite 与 Chroma 开发企业知识库 RAG 平台，
 > 实现文档切分、向量检索、带引用问答和 4 类意图 Agent Router；设计跨 SQLite、
-> Chroma 和文件存储的索引生命周期与失败补偿机制，并使用 29 个 pytest 测试、
-> Docker Compose 和 GitHub Actions保障交付质量。
+> Chroma 和文件存储的索引生命周期与失败补偿机制，增加可量化检索评估与请求可观测性，
+> 并使用 39 个 pytest 测试、Docker Compose 和 GitHub Actions 保障交付质量。
 
 ## 3. 不要写进简历的表述
 
@@ -47,8 +49,8 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第一部分：项目目标
 
-> 我做的是一个企业知识库 RAG 问答平台。用户可以创建知识库、上传 TXT 或
-> Markdown 文档，系统完成切分和向量索引，之后可以进行带真实引用的问答。
+> 我做的是一个企业知识库 RAG 问答平台。用户可以创建知识库、上传 TXT、Markdown
+> 或文本型 PDF，系统完成切分和向量索引，之后可以进行带真实引用的问答。
 > 我没有从单文件 Demo 开始，而是按 API、Service、Repository 和 Model 分层实现。
 
 ### 第二部分：索引链路
@@ -78,9 +80,9 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第六部分：工程保障
 
-> 项目现在有 18 个接口、13 张业务表和 29 个测试。Docker Compose 负责统一运行环境，
-> GitHub Actions 在每次推送后自动运行测试。当前边界是只支持 TXT/Markdown，
-> 还没有登录、多租户、混合检索和 Rerank。
+> 项目现在有 19 个 API 操作、13 张业务表和 39 个测试。Docker Compose 负责统一运行环境，
+> GitHub Actions 在每次推送后自动运行测试。我还增加了请求 ID、就绪检查、模型超时和
+> 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户、混合检索和 Rerank。
 
 ## 5. 高频面试问题
 
@@ -143,8 +145,23 @@ Docker 统一应用运行环境和启动方式；GitHub Actions 在代码推送�
 
 ### 12. 下一步会怎么优化？
 
-优先增加评估集与检索指标，再考虑混合检索和 Rerank；数据层升级 PostgreSQL + pgvector，
-文档处理加入 PDF 页码和后台任务队列，最后再增加登录与知识库权限。
+先扩充人工标注评估集，用已有指标验证 BM25 混合检索和 Rerank 是否真正改善召回；
+再将数据层升级 PostgreSQL + pgvector，把文档处理迁移到后台任务队列，并增加登录与权限。
+
+### 13. Hit Rate@K 和 MRR 有什么区别？
+
+Hit Rate@K 只关心前 K 条里是否至少出现一个正确证据，适合衡量“有没有找回来”。
+MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越高，适合衡量排序质量。
+
+### 14. `/health` 和 `/health/ready` 为什么分开？
+
+`/health` 只判断 FastAPI 进程能否响应；`/health/ready` 还检查 SQLite 和 Chroma。
+容器仍存活但依赖不可用时，前者可以帮助诊断进程，后者告诉流量入口暂时不要分发请求。
+
+### 15. 为什么上传文件要流式写入？
+
+一次性 `read()` 会让大文件完整进入内存，并发上传时容易放大内存占用。分块读取让单次
+写入占用可控，再配合大小限制和异常清理，避免超大文件与半成品文件长期占用磁盘。
 
 ## 6. 面试演示顺序
 
@@ -164,9 +181,10 @@ Docker 统一应用运行环境和启动方式；GitHub Actions 在代码推送�
 
 面试前可以记住这些真实数字：
 
-- 18 个 FastAPI 接口
+- 19 个 FastAPI API 操作
 - 13 张 SQLAlchemy 业务表
 - 4 类 Agent 意图
-- 29 个 pytest 测试
+- 39 个 pytest 测试
 - 2 个 Docker Compose 服务
 - 3 类持久化位置：SQLite、Chroma、uploads
+- 3 个检索评估指标：Hit Rate@K、MRR、关键词召回率

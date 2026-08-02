@@ -19,6 +19,8 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./knowflow.db"
     upload_dir: str = "./uploads"
+    max_upload_size_mb: int = Field(default=10, ge=1, le=100)
+    upload_read_chunk_size: int = Field(default=1024 * 1024, ge=1024)
     chunk_size: int = 500
     chunk_overlap: int = 80
 
@@ -60,6 +62,8 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "./chroma_db"
     chroma_collection_name: str = "knowflow_chunks"
     embedding_batch_size: int = 32
+    model_request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
+    model_max_retries: int = Field(default=1, ge=0, le=5)
     retrieval_top_k: int = 3
     retrieval_candidate_multiplier: int = Field(default=3, ge=1, le=10)
     retrieval_distance_threshold: float = 0.6

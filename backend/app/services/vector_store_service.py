@@ -63,6 +63,15 @@ class ChromaVectorStoreService:
 
         return chroma_ids
 
+    def heartbeat(self) -> None:
+        try:
+            self.client.heartbeat()
+        except Exception as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Chroma 就绪检查失败",
+            ) from error
+
     def delete_by_document(self, document_id: int) -> None:
         """文档重新切分或删除前，清理它在 Chroma 中的旧向量。"""
         self._delete(

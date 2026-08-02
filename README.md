@@ -12,7 +12,8 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 ## 核心能力
 
 - 知识库创建、查询和删除
-- TXT、Markdown 文档上传与元信息管理
+- TXT、Markdown、文本型 PDF 上传与元信息管理
+- 上传文件分块写盘、10 MB 默认限制和异常残留文件清理
 - 文本清洗、可配置 Chunk 切分和位置记录
 - OpenAI 兼容 Embedding 接口与 Chroma 向量索引
 - 候选扩大召回、同文档重复正文去重与 Top-K 语义检索
@@ -21,11 +22,14 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 - 带引用来源、资料不足判断和会话历史的 RAG 问答
 - 普通问答、文档总结、多文档对比和信息追问的轻量 Agent Router
 - Agent 执行步骤、检索日志和模型 Token 用量记录
+- 请求 ID、存活/就绪检查和模型调用超时保护
+- 基于人工标注题目的离线检索评估（Hit Rate@K、MRR、关键词召回率）
 - 回答反馈、文档摘要和自动 FAQ
 - Streamlit 中文演示页面
 - Docker Compose 一键启动与 GitHub Actions 自动化测试
 
-当前仅支持 TXT 和 Markdown 文档。PDF、PostgreSQL + pgvector 和用户登录属于后续升级项。
+PDF 当前支持提取文本和保留页码标记，但扫描件尚未接入 OCR。
+PostgreSQL + pgvector、用户登录和异步任务属于后续升级项。
 
 ## 系统架构
 
@@ -90,6 +94,7 @@ flowchart LR
 | ORM | SQLAlchemy | 映射 Python 模型与关系型数据库表 |
 | 业务数据库 | SQLite | 保存结构化业务数据和 Chunk 正文 |
 | 向量数据库 | Chroma | 保存 Embedding 并执行语义检索 |
+| 文档解析 | pypdf | 提取文本型 PDF，并保留页码标记 |
 | 模型接口 | OpenAI 兼容 API | 提供 Chat Completion 和 Embedding |
 | 配置 | pydantic-settings + `.env` | 隔离环境配置和真实密钥 |
 | 测试 | pytest | 验证服务、RAG 和 Agent 业务流程 |
@@ -112,6 +117,7 @@ knowflow-ai/
 │   │   ├── services/        # RAG、Agent 和文档业务逻辑
 │   │   └── main.py          # FastAPI 应用入口
 │   ├── tests/               # pytest 测试
+│   ├── scripts/             # 离线检索评估等工程脚本
 │   ├── .env.example         # 后端配置模板
 │   └── Dockerfile
 ├── frontend/
@@ -121,6 +127,7 @@ knowflow-ai/
 │   ├── app.py               # Streamlit 入口
 │   └── Dockerfile
 ├── docs/                    # 中文阶段文档和架构说明
+├── evaluation/              # 可版本化的检索评估集
 ├── sample_data/             # 可公开使用的测试知识库
 └── docker-compose.yml
 ```
@@ -165,6 +172,7 @@ docker compose up --build
 - Streamlit 页面：<http://127.0.0.1:8501>
 - FastAPI 文档：<http://127.0.0.1:8000/docs>
 - 健康检查：<http://127.0.0.1:8000/api/health>
+- 就绪检查：<http://127.0.0.1:8000/api/health/ready>
 
 可以上传 [sample_data/knowflow_demo_handbook.md](sample_data/knowflow_demo_handbook.md)
 体验切分、索引、检索和问答流程。
@@ -204,10 +212,11 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-项目现有 29 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
+项目现有 39 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
 RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
 多存储一致性。生命周期测试会验证旧向量清理、数据库失败补偿、
-派生数据失效、SQLite 外键和内部路径隐藏。
+派生数据失效、SQLite 外键和内部路径隐藏；可靠性测试还覆盖流式上传、
+PDF 解析、请求追踪、模型超时和检索评估指标。
 
 GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时，
 自动执行后端 pytest 和前端 Python 语法检查。详见
@@ -222,6 +231,8 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - 检索先扩大候选集再去重，避免重复正文占满最终 Top-K。
 - RAG 在最佳检索距离超过阈值时直接返回“知识库中没有足够依据”，减少无依据回答。
 - 摘要、FAQ 和多文档对比会调用 LLM；普通语义检索只调用 Embedding。
+- 评估集使用文件名和关键事实词标注，不绑定会随重切分变化的 Chunk ID。
+- 存活检查只表示进程可响应；就绪检查还验证 SQLite 和 Chroma 可访问。
 - 项目暂不加入复杂权限、多租户和多 Agent 编排，优先保证完整性与可讲解性。
 
 ## 中文文档
@@ -229,6 +240,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - [系统架构说明](docs/system_architecture.md)
 - [中文接口文档](docs/api_reference.md)
 - [RAG 工程加固](docs/stage_09_rag_hardening.md)
+- [可靠性与检索评估](docs/stage_09_reliability_and_evaluation.md)
 - [简历与面试讲解](docs/resume_project_guide.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)
@@ -238,8 +250,8 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 
 ## 后续计划
 
-- 支持 PDF 文档解析和页码来源
 - 增加 PostgreSQL + pgvector 迁移方案
 - 补充用户登录与知识库访问控制
-- 增加检索质量评估数据集
-- 增加上传文件大小限制和后台异步处理队列
+- 增加 BM25 混合检索和 Rerank，并使用现有评估集验证收益
+- 将文档处理迁移到后台异步任务队列
+- 为扫描版 PDF 增加 OCR

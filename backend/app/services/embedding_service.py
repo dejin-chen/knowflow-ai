@@ -1,5 +1,5 @@
 from fastapi import HTTPException, status
-from openai import APIError, OpenAI
+from openai import APIConnectionError, APIError, APITimeoutError, OpenAI
 
 from app.core.config import settings
 
@@ -23,6 +23,8 @@ class EmbeddingService:
         client = OpenAI(
             api_key=settings.openai_api_key,
             base_url=settings.openai_base_url,
+            timeout=settings.model_request_timeout_seconds,
+            max_retries=settings.model_max_retries,
         )
         embeddings: list[list[float]] = []
 
@@ -35,6 +37,11 @@ class EmbeddingService:
                     encoding_format="float",
                 )
                 embeddings.extend(item.embedding for item in response.data)
+        except (APITimeoutError, APIConnectionError) as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Embedding 服务暂时不可用，请稍后重试",
+            ) from error
         except APIError as error:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,

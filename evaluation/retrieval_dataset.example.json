@@ -1,0 +1,40 @@
+{
+  "name": "KnowFlow 员工手册检索基线",
+  "cases": [
+    {
+      "case_id": "leave-sick-001",
+      "question": "连续病假超过三个工作日需要补充什么材料？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["正式病假证明原件", "电子材料"],
+      "top_k": 3
+    },
+    {
+      "case_id": "leave-annual-001",
+      "question": "年假至少需要提前多久申请？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["提前三个工作日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "expense-001",
+      "question": "费用发生后最晚多久提交报销？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["30 个自然日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "purchase-001",
+      "question": "采购金额超过两万元由谁审批？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["采购委员会", "公司授权负责人"],
+      "top_k": 3
+    },
+    {
+      "case_id": "security-001",
+      "question": "发现账号异常登录后应该如何处理？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["信息安全响应邮箱", "两小时"],
+      "top_k": 3
+    }
+  ]
+}

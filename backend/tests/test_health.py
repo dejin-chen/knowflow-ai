@@ -16,3 +16,4 @@ def test_app_registers_health_route() -> None:
     paths = app.openapi()["paths"]
 
     assert "/api/health" in paths
+    assert "/api/health/ready" in paths
