@@ -35,7 +35,7 @@ KnowFlow AI 是一个面向企业内部制度和项目资料的知识库 RAG 问
 
 后端使用 FastAPI，并按 API、Service、Repository、Model、Schema 分层；SQLite 保存业务主数据和
 Chunk 正文，Chroma 负责向量召回，Streamlit 提供中文演示页面。项目目前有 21 个 API 操作、
-14 张业务表、4 类 Agent 意图和 44 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
+14 张业务表、4 类 Agent 意图和 46 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
 完成容器化与自动验收。
 
 ### 2. 这个项目解决了什么业务问题？
@@ -544,7 +544,7 @@ Docker 把 Python 版本、依赖、启动命令和目录约定封装成镜像�
 
 **参考回答：**
 
-项目有 44 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
+项目有 46 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
 FAQ、Token、上传限制、PDF、请求追踪、模型超时、评估指标、回答缓存和跨存储失败补偿。CI 使用 `-W error`，
 警告也会让测试失败。
 
@@ -662,7 +662,8 @@ Prompt 哈希和缓存版本一起计算 SHA-256。这样相同问题不会跨�
 
 第一次请求执行完整 RAG，并把回答、引用、检索证据、资料不足标记和模型 Token 写入 SQLite；
 再次命中时跳过 Embedding、Chroma 和聊天模型，但仍保存本轮消息和检索日志。缓存默认一小时 TTL，
-文档重新切分或建立新索引前会主动清空所属知识库缓存，删除知识库时由外键级联清理。
+文档重新切分或建立新索引前会主动清空所属知识库缓存，删除知识库时由外键级联清理。为防止 TTL
+窗口内大量不同问题导致表膨胀，还设置单知识库 500 条和全局 2000 条上限，超限时批量 LRU 淘汰。
 
 当前是单机精确缓存，优点是稳定、可测试且不需要额外生成缓存查询向量。高并发多实例时我会升级
 Redis，并使用分布式锁或 singleflight 防止热点缓存失效后大量请求同时调用模型；再增加 TTL 抖动和
@@ -682,7 +683,7 @@ Redis，并使用分布式锁或 singleflight 防止热点缓存失效后大量�
 > 项目还实现了轻量 Agent Router，在普通问答、文档总结、多文档对比和追问之间选择工具。工程上最有
 > 价值的是跨 SQLite、Chroma、原文件的索引生命周期与失败补偿，以及 Hit Rate@K、MRR 和关键词召回率
 > 离线评估。普通问答还支持带 TTL 和索引变更失效的高频回答缓存，命中后跳过 Embedding、Chroma 和
-> 聊天模型，同时保留会话与检索日志。现在有 21 个 API 操作、14 张表、44 个测试，并通过 Docker
+> 聊天模型，同时保留会话与检索日志。现在有 21 个 API 操作、14 张表、46 个测试，并通过 Docker
 > Compose 和 GitHub Actions 验证。
 >
 > 当前边界是没有登录、多租户、OCR、混合检索和 Rerank。我能说明这些功能如何增加，但不会说成已经实现。

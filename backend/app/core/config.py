@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     rag_answer_cache_enabled: bool = True
     rag_answer_cache_ttl_seconds: int = Field(default=3600, ge=60, le=604800)
     rag_answer_cache_version: str = Field(default="v1", min_length=1, max_length=50)
+    rag_answer_cache_max_entries: int = Field(default=2000, ge=1, le=100000)
+    rag_answer_cache_max_entries_per_kb: int = Field(
+        default=500,
+        ge=1,
+        le=10000,
+    )
     agent_tool_context_characters: int = 10000
 
     model_config = SettingsConfigDict(

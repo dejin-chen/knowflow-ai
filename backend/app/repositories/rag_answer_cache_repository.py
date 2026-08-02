@@ -110,6 +110,58 @@ class RagAnswerCacheRepository:
             self.db.commit()
         return result.rowcount or 0
 
+    def enforce_capacity(
+        self,
+        knowledge_base_id: int,
+        *,
+        max_entries: int,
+        max_entries_per_kb: int,
+        commit: bool = True,
+    ) -> int:
+        """先限制当前知识库，再限制全局；超限时批量淘汰最久未使用记录。"""
+        effective_per_kb_limit = min(max_entries, max_entries_per_kb)
+        evicted_count = self._evict_lru(
+            max_entries=effective_per_kb_limit,
+            knowledge_base_id=knowledge_base_id,
+        )
+        evicted_count += self._evict_lru(max_entries=max_entries)
+        if commit:
+            self.db.commit()
+        return evicted_count
+
+    def _evict_lru(
+        self,
+        *,
+        max_entries: int,
+        knowledge_base_id: int | None = None,
+    ) -> int:
+        conditions = []
+        if knowledge_base_id is not None:
+            conditions.append(RagAnswerCache.knowledge_base_id == knowledge_base_id)
+
+        count_statement = select(func.count(RagAnswerCache.id)).where(*conditions)
+        current_count = int(self.db.scalar(count_statement) or 0)
+        overflow_count = current_count - max_entries
+        if overflow_count <= 0:
+            return 0
+
+        # last_hit_at 表示真实命中时间；从未命中的记录使用最近写入时间。
+        last_used_at = func.coalesce(
+            RagAnswerCache.last_hit_at,
+            RagAnswerCache.updated_at,
+            RagAnswerCache.created_at,
+        )
+        oldest_ids = (
+            select(RagAnswerCache.id)
+            .where(*conditions)
+            .order_by(last_used_at.asc(), RagAnswerCache.id.asc())
+            .limit(overflow_count)
+        )
+        result = self.db.execute(
+            delete(RagAnswerCache).where(RagAnswerCache.id.in_(oldest_ids))
+        )
+        return max(result.rowcount or 0, 0)
+
     def get_stats(self, knowledge_base_id: int, now: datetime) -> dict[str, int]:
         statement = select(
             func.count(RagAnswerCache.id),

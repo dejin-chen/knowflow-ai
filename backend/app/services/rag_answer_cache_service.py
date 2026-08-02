@@ -104,8 +104,13 @@ class RagAnswerCacheService:
                 source_total_tokens=source_total_tokens,
                 expires_at=expires_at,
             )
-            # 当前键刷新后再清理其他过期记录，避免 SQLite 复用刚删除的 ORM 主键。
-            self.repository.delete_expired(now)
+            # 当前键刷新后先清过期数据，再按 LRU 批量限制单库和全局容量。
+            self.repository.delete_expired(now, commit=False)
+            self.repository.enforce_capacity(
+                knowledge_base_id,
+                max_entries=settings.rag_answer_cache_max_entries,
+                max_entries_per_kb=settings.rag_answer_cache_max_entries_per_kb,
+            )
         except SQLAlchemyError:
             self.db.rollback()
             logger.exception("写入 RAG 回答缓存失败，本次回答仍正常返回")
@@ -119,6 +124,11 @@ class RagAnswerCacheService:
         return {
             "enabled": settings.rag_answer_cache_enabled,
             "ttl_seconds": settings.rag_answer_cache_ttl_seconds,
+            "max_entries": settings.rag_answer_cache_max_entries,
+            "max_entries_per_kb": min(
+                settings.rag_answer_cache_max_entries,
+                settings.rag_answer_cache_max_entries_per_kb,
+            ),
             **stats,
         }
 

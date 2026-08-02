@@ -205,7 +205,11 @@ def _render_cache_status(client: BackendApiClient, knowledge_base_id: int) -> No
             "估算节省聊天 Token",
             stats["estimated_chat_tokens_saved"],
         )
-        st.caption(f"缓存有效期：{stats['ttl_seconds']} 秒")
+        st.caption(
+            f"有效期：{stats['ttl_seconds']} 秒；"
+            f"当前知识库上限：{stats['max_entries_per_kb']} 条；"
+            f"全局上限：{stats['max_entries']} 条"
+        )
         if st.button(
             "清空回答缓存",
             icon=":material/delete_sweep:",

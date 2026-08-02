@@ -93,13 +93,33 @@ flowchart TD
 
 删除知识库时，数据库外键级联删除对应缓存。
 
-## 7. TTL 和惰性清理
+## 7. TTL、容量限制和 LRU
 
 读取缓存时只返回 `expires_at` 晚于当前时间的记录。写入新缓存后，Repository 会顺便删除
 已经过期的记录，这叫惰性清理。
 
 当前没有增加定时任务，因为项目规模较小。生产环境数据量大时，可以由后台任务周期清理，
 或者直接使用 Redis 的原生过期机制。
+
+TTL 只能限制一条记录活多久，不能阻止一小时内出现大量不同问题。项目因此增加两层容量限制：
+
+```dotenv
+RAG_ANSWER_CACHE_MAX_ENTRIES=2000
+RAG_ANSWER_CACHE_MAX_ENTRIES_PER_KB=500
+```
+
+每次写入后的处理顺序是：
+
+```text
+删除过期记录
+→ 淘汰当前知识库超出上限的记录
+→ 淘汰全局超出上限的记录
+→ 一次提交清理事务
+```
+
+淘汰采用 LRU 思路：命中过的记录按 `last_hit_at` 判断最近使用时间，从未命中的记录按最近写入时间
+判断；时间相同再按主键顺序保证结果稳定。Repository 只删除超出的数量，而不是容量一满就清空全部
+缓存。单知识库上限还会自动受全局上限约束。
 
 ## 8. 可观测性
 
@@ -110,7 +130,7 @@ GET    /api/knowledge-bases/{knowledge_base_id}/cache/stats
 DELETE /api/knowledge-bases/{knowledge_base_id}/cache
 ```
 
-页面可以查看有效条目数、累计命中次数、估算节省的聊天 Token 和 TTL，也可以手动清空缓存。
+页面可以查看有效条目数、累计命中次数、估算节省的聊天 Token、TTL 和两层容量上限，也可以手动清空缓存。
 
 “估算节省 Token”按首次生成答案时的聊天模型总 Token 乘以命中次数计算。它没有包含
 Embedding Token，因此是保守估算；也不能直接等同于节省金额，金额还取决于模型计价。
@@ -120,8 +140,8 @@ Embedding Token，因此是保守估算；也不能直接等同于节省金额�
 | 文件 | 职责 |
 | --- | --- |
 | `backend/app/models/rag_answer_cache.py` | 定义缓存表 |
-| `backend/app/repositories/rag_answer_cache_repository.py` | 封装查询、写入、命中计数、统计和删除 |
-| `backend/app/services/rag_answer_cache_service.py` | 规范化问题、生成缓存键、控制 TTL 和失效 |
+| `backend/app/repositories/rag_answer_cache_repository.py` | 封装查询、写入、命中计数、统计、LRU 和删除 |
+| `backend/app/services/rag_answer_cache_service.py` | 规范化问题、生成缓存键、控制 TTL、容量和失效 |
 | `backend/app/services/rag_chat_service.py` | 在普通 RAG 前读取缓存，完成后回写缓存 |
 | `backend/app/services/document_chunk_service.py` | 文档重新切分前使缓存失效 |
 | `backend/app/services/document_vector_index_service.py` | 建立新索引前使缓存失效 |
@@ -151,6 +171,8 @@ Embedding Token，因此是保守估算；也不能直接等同于节省金额�
 3. 不同 Top-K 不会共用缓存。
 4. TTL 过期后重新执行完整 RAG，并刷新原记录。
 5. 文档重新切分和重建索引都会清空所属知识库缓存。
+6. 单知识库超过容量时保留最近命中的缓存。
+7. 多个知识库合计超过全局容量时淘汰全局最旧记录。
 
 测试曾发现：先删除过期 ORM 对象、再在同一事务插入新对象时，SQLite 可能复用主键，导致
 SQLAlchemy identity map 警告。最终调整为先更新同一缓存键，再清理其他过期记录，并让
@@ -170,7 +192,7 @@ SQLAlchemy identity map 警告。最终调整为先更新同一缓存键，再�
 
 ## 13. 这一阶段学到了什么
 
-- 缓存不是简单的 `question -> answer` 字典，必须考虑作用域、配置、过期和数据变更。
+- 缓存不是简单的 `question -> answer` 字典，必须考虑作用域、配置、过期、容量和数据变更。
 - RAG 缓存命中可以同时跳过 Embedding、向量检索和聊天模型。
 - 缓存属于派生数据，知识库内容变化后可以删除并重新生成。
 - 缓存命中不应破坏会话持久化、引用溯源和可观测性。
@@ -181,8 +203,8 @@ SQLAlchemy identity map 警告。最终调整为先更新同一缓存键，再�
 简历可以写：
 
 > 设计基于 SQLite 的 RAG 高频问答缓存，使用知识库、规范化问题、检索参数、模型与 Prompt
-> 签名构造缓存键，并通过 TTL 和索引变更主动失效避免旧答案；缓存命中时跳过 Embedding、
-> Chroma 与聊天模型调用，同时保留会话和检索日志，提供命中次数与估算 Token 节省统计。
+> 签名构造缓存键，并通过 TTL、索引变更主动失效和两级 LRU 容量治理避免旧答案与缓存膨胀；
+> 缓存命中时跳过 Embedding、Chroma 与聊天模型调用，同时保留会话和检索日志。
 
 面试时先讲清楚正确性，再讲性能：为什么不会跨知识库复用、为什么内容变化会失效、为什么
 命中后仍要写日志。最后说明高并发时会升级 Redis 和分布式锁，体现你知道当前方案的边界。

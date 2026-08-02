@@ -1,7 +1,7 @@
 from types import SimpleNamespace
 from datetime import timedelta
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
 
 import app.models
@@ -195,10 +195,14 @@ class FakeVectorStore:
         pass
 
 
-def seed_cache(cache_service: RagAnswerCacheService, knowledge_base_id: int) -> None:
+def seed_cache(
+    cache_service: RagAnswerCacheService,
+    knowledge_base_id: int,
+    question: str = "旧问题",
+) -> None:
     cache_service.store(
         knowledge_base_id=knowledge_base_id,
-        question="旧问题",
+        question=question,
         top_k=3,
         answer="旧答案",
         citations=[],
@@ -208,6 +212,77 @@ def seed_cache(cache_service: RagAnswerCacheService, knowledge_base_id: int) -> 
         insufficient_evidence=True,
         source_total_tokens=0,
     )
+
+
+def test_per_knowledge_base_capacity_evicts_least_recently_used(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(settings, "rag_answer_cache_max_entries", 10)
+    monkeypatch.setattr(settings, "rag_answer_cache_max_entries_per_kb", 2)
+    db = build_database()
+    try:
+        knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="单库 LRU 测试库")
+        )
+        cache_service = RagAnswerCacheService(db)
+        seed_cache(cache_service, knowledge_base.id, "问题一")
+        seed_cache(cache_service, knowledge_base.id, "问题二")
+
+        # 问题一刚被命中，问题三写入后应淘汰更久未使用的问题二。
+        assert cache_service.get(knowledge_base.id, "问题一", 3) is not None
+        seed_cache(cache_service, knowledge_base.id, "问题三")
+
+        assert cache_service.get(knowledge_base.id, "问题一", 3) is not None
+        assert cache_service.get(knowledge_base.id, "问题二", 3) is None
+        assert cache_service.get(knowledge_base.id, "问题三", 3) is not None
+        stats = cache_service.get_stats(knowledge_base.id)
+        assert stats["entry_count"] == 2
+        assert stats["max_entries_per_kb"] == 2
+        assert stats["max_entries"] == 10
+    finally:
+        db.close()
+
+
+def test_global_capacity_limits_entries_across_knowledge_bases(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "rag_answer_cache_max_entries", 3)
+    monkeypatch.setattr(settings, "rag_answer_cache_max_entries_per_kb", 3)
+    db = build_database()
+    try:
+        first_knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="全局容量测试库一")
+        )
+        second_knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="全局容量测试库二")
+        )
+        cache_service = RagAnswerCacheService(db)
+        seed_cache(cache_service, first_knowledge_base.id, "最早的问题")
+        seed_cache(cache_service, first_knowledge_base.id, "保留问题一")
+        seed_cache(cache_service, second_knowledge_base.id, "保留问题二")
+        seed_cache(cache_service, second_knowledge_base.id, "最新的问题")
+
+        assert cache_service.get(
+            first_knowledge_base.id,
+            "最早的问题",
+            3,
+        ) is None
+        assert cache_service.get(
+            first_knowledge_base.id,
+            "保留问题一",
+            3,
+        ) is not None
+        assert cache_service.get(
+            second_knowledge_base.id,
+            "保留问题二",
+            3,
+        ) is not None
+        assert cache_service.get(
+            second_knowledge_base.id,
+            "最新的问题",
+            3,
+        ) is not None
+        assert db.scalar(select(func.count(RagAnswerCache.id))) == 3
+    finally:
+        db.close()
 
 
 def test_reprocessing_document_invalidates_knowledge_base_cache(tmp_path) -> None:

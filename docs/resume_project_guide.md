@@ -19,9 +19,9 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
    4 类工具之间路由，并持久化 Agent 执行步骤、检索日志和模型 Token 用量。
 3. 实现 RAG 索引生命周期治理，在文档重处理和知识库删除场景下联动清理 SQLite、
    Chroma 与原始文件；使用事务、失败补偿和派生数据失效机制降低悬空向量与过期引用风险。
-4. 建立带 TTL、配置签名和索引变更失效的高频回答缓存，命中时跳过 Embedding 与 Chat LLM，
-   统计累计命中和估算节省 Token；使用离线评估集计算 Hit Rate@K、MRR 和关键词召回率。
-5. 使用 pytest 建立 44 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
+4. 建立带 TTL、配置签名、索引变更失效和两级 LRU 容量治理的高频回答缓存，命中时跳过
+   Embedding 与 Chat LLM；使用离线评估集计算 Hit Rate@K、MRR 和关键词召回率。
+5. 使用 pytest 建立 46 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
    配置 GitHub Actions 在主分支推送和 Pull Request 时自动执行后端测试与前端检查。
 
 ### 精简版本
@@ -31,7 +31,7 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 > 基于 FastAPI、Streamlit、SQLite 与 Chroma 开发企业知识库 RAG 平台，
 > 实现文档切分、向量检索、带引用问答和 4 类意图 Agent Router；设计跨 SQLite、
 > Chroma 和文件存储的索引生命周期与失败补偿机制，增加高频回答缓存、可量化检索评估与
-> 请求可观测性，并使用 44 个 pytest 测试、
+> 请求可观测性，并使用 46 个 pytest 测试、
 > Docker Compose 和 GitHub Actions 保障交付质量。
 
 ## 3. 不要写进简历的表述
@@ -81,7 +81,7 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第六部分：工程保障
 
-> 项目现在有 21 个 API 操作、14 张业务表和 44 个测试。Docker Compose 负责统一运行环境，
+> 项目现在有 21 个 API 操作、14 张业务表和 46 个测试。Docker Compose 负责统一运行环境，
 > GitHub Actions 在每次推送后自动运行测试。我还增加了请求 ID、就绪检查、模型超时和
 > 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户、混合检索和 Rerank。
 
@@ -170,6 +170,9 @@ MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越�
 默认 TTL 是 1 小时；文档重新切分或建立新索引前会清空整个知识库缓存。当前不做语义相似缓存，
 因为条件略有差异的问题可能需要不同答案。
 
+TTL 只解决过期，不解决短时间高基数问题，所以系统还限制单知识库 500 条和全局 2000 条；超限时
+按照最后命中时间或最近写入时间执行 LRU 批量淘汰。多实例高并发时再迁移 Redis。
+
 ## 6. 面试演示顺序
 
 建议演示 5 到 8 分钟：
@@ -191,7 +194,7 @@ MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越�
 - 21 个 FastAPI API 操作
 - 14 张 SQLAlchemy 业务表
 - 4 类 Agent 意图
-- 44 个 pytest 测试
+- 46 个 pytest 测试
 - 2 个 Docker Compose 服务
 - 3 类持久化位置：SQLite、Chroma、uploads
 - 3 个检索评估指标：Hit Rate@K、MRR、关键词召回率

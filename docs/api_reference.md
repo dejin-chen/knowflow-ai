@@ -571,6 +571,8 @@ Router 可能返回四种 `intent`：
   "knowledge_base_id": 1,
   "enabled": true,
   "ttl_seconds": 3600,
+  "max_entries": 2000,
+  "max_entries_per_kb": 500,
   "entry_count": 8,
   "hit_count": 21,
   "estimated_chat_tokens_saved": 18640
@@ -579,6 +581,10 @@ Router 可能返回四种 `intent`：
 
 `estimated_chat_tokens_saved` 使用“缓存命中次数 × 首次回答总 Token”估算，只统计省去的 Chat LLM
 Token，不包含 Embedding Token，也不等同于费用账单。
+
+`max_entries_per_kb` 限制单个知识库缓存数量，`max_entries` 限制所有知识库总量。写入后先清理
+过期记录，再按最近命中/写入时间执行 LRU 批量淘汰；即使配置的单库上限大于全局上限，接口也会
+返回实际生效的较小值。
 
 `DELETE /api/knowledge-bases/{knowledge_base_id}/cache`
 
