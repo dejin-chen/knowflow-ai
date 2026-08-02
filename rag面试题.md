@@ -34,8 +34,8 @@ KnowFlow AI 是一个面向企业内部制度和项目资料的知识库 RAG 问
 之后提供带引用来源的问答、文档总结和多文档对比。
 
 后端使用 FastAPI，并按 API、Service、Repository、Model、Schema 分层；SQLite 保存业务主数据和
-Chunk 正文，Chroma 负责向量召回，Streamlit 提供中文演示页面。项目目前有 19 个 API 操作、
-13 张业务表、4 类 Agent 意图和 39 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
+Chunk 正文，Chroma 负责向量召回，Streamlit 提供中文演示页面。项目目前有 21 个 API 操作、
+14 张业务表、4 类 Agent 意图和 44 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
 完成容器化与自动验收。
 
 ### 2. 这个项目解决了什么业务问题？
@@ -544,8 +544,8 @@ Docker 把 Python 版本、依赖、启动命令和目录约定封装成镜像�
 
 **参考回答：**
 
-项目有 39 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
-FAQ、Token、上传限制、PDF、请求追踪、模型超时、评估指标和跨存储失败补偿。CI 使用 `-W error`，
+项目有 44 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
+FAQ、Token、上传限制、PDF、请求追踪、模型超时、评估指标、回答缓存和跨存储失败补偿。CI 使用 `-W error`，
 警告也会让测试失败。
 
 Fake Embedding、Fake Chroma 和 Fake LLM 让测试不依赖网络、不消耗 Token，并能精确构造超时、重复结果、
@@ -653,6 +653,21 @@ Rerank、更大评估集、引用校验、Prompt Injection 防护，以及压测
 我的取舍是先把一个应届生能讲清楚的系统做完整，再使用评估和真实瓶颈驱动升级，而不是一次堆入
 所有中间件。
 
+### 61. 高频回答缓存是怎样设计的，如何避免返回旧答案？
+
+**参考回答：**
+
+我没有只用问题文本作键，而是把知识库 ID、规范化问题、Top-K、模型名、距离阈值、候选倍数、
+Prompt 哈希和缓存版本一起计算 SHA-256。这样相同问题不会跨知识库或跨配置错误复用。
+
+第一次请求执行完整 RAG，并把回答、引用、检索证据、资料不足标记和模型 Token 写入 SQLite；
+再次命中时跳过 Embedding、Chroma 和聊天模型，但仍保存本轮消息和检索日志。缓存默认一小时 TTL，
+文档重新切分或建立新索引前会主动清空所属知识库缓存，删除知识库时由外键级联清理。
+
+当前是单机精确缓存，优点是稳定、可测试且不需要额外生成缓存查询向量。高并发多实例时我会升级
+Redis，并使用分布式锁或 singleflight 防止热点缓存失效后大量请求同时调用模型；再增加 TTL 抖动和
+真实 P50/P95 延迟监控。语义缓存只有在评估集证明误命中风险可接受后才会引入。
+
 ## 10. 三分钟项目讲解模板
 
 > KnowFlow AI 是一个企业知识库 RAG 问答平台。用户上传 TXT、Markdown 或文本型 PDF 后，原文件保存在
@@ -666,7 +681,9 @@ Rerank、更大评估集、引用校验、Prompt Injection 防护，以及压测
 >
 > 项目还实现了轻量 Agent Router，在普通问答、文档总结、多文档对比和追问之间选择工具。工程上最有
 > 价值的是跨 SQLite、Chroma、原文件的索引生命周期与失败补偿，以及 Hit Rate@K、MRR 和关键词召回率
-> 离线评估。现在有 19 个 API 操作、13 张表、39 个测试，并通过 Docker Compose 和 GitHub Actions 验证。
+> 离线评估。普通问答还支持带 TTL 和索引变更失效的高频回答缓存，命中后跳过 Embedding、Chroma 和
+> 聊天模型，同时保留会话与检索日志。现在有 21 个 API 操作、14 张表、44 个测试，并通过 Docker
+> Compose 和 GitHub Actions 验证。
 >
 > 当前边界是没有登录、多租户、OCR、混合检索和 Rerank。我能说明这些功能如何增加，但不会说成已经实现。
 

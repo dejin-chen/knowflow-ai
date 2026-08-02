@@ -20,6 +20,8 @@ def render_chat_page(
         st.warning("当前知识库没有已建立向量索引的文档。")
         return
 
+    _render_cache_status(client, selected_knowledge_base["id"])
+
     try:
         conversations = client.list_conversations(selected_knowledge_base["id"])
     except ApiClientError as error:
@@ -72,6 +74,7 @@ def render_chat_page(
             "intent": result["intent"],
             "execution_steps": result["execution_steps"],
             "model_usages": result["model_usages"],
+            "cache_hit": result["cache_hit"],
             "feedback": None,
         }
         _render_retrieval_details(assistant_message)
@@ -117,6 +120,7 @@ def _render_conversation_selector(
                 "intent": message.get("intent"),
                 "execution_steps": message.get("execution_steps", []),
                 "model_usages": message.get("model_usages", []),
+                "cache_hit": False,
                 "feedback": message.get("feedback"),
             }
             for message in messages
@@ -169,6 +173,10 @@ def _render_retrieval_details(message: dict) -> None:
 
 
 def _render_model_usage(message: dict) -> None:
+    if message.get("cache_hit"):
+        st.caption("已命中高频回答缓存，本次未调用 Embedding 和聊天模型。")
+        return
+
     model_usages = message.get("model_usages", [])
     if not model_usages:
         return
@@ -180,6 +188,36 @@ def _render_model_usage(message: dict) -> None:
                 f"输出 {usage['completion_tokens']} Token；"
                 f"总计 {usage['total_tokens']} Token"
             )
+
+
+def _render_cache_status(client: BackendApiClient, knowledge_base_id: int) -> None:
+    try:
+        stats = client.get_rag_cache_stats(knowledge_base_id)
+    except ApiClientError as error:
+        st.warning(f"缓存统计暂不可用：{error}")
+        return
+
+    with st.expander("回答缓存"):
+        entry_column, hit_column, token_column = st.columns(3)
+        entry_column.metric("有效缓存", stats["entry_count"])
+        hit_column.metric("累计命中", stats["hit_count"])
+        token_column.metric(
+            "估算节省聊天 Token",
+            stats["estimated_chat_tokens_saved"],
+        )
+        st.caption(f"缓存有效期：{stats['ttl_seconds']} 秒")
+        if st.button(
+            "清空回答缓存",
+            icon=":material/delete_sweep:",
+            disabled=stats["entry_count"] == 0,
+        ):
+            try:
+                result = client.clear_rag_answer_cache(knowledge_base_id)
+            except ApiClientError as error:
+                st.error(error)
+                return
+            st.success(f"已清理 {result['deleted_entry_count']} 条缓存。")
+            st.rerun()
 
 
 def _render_feedback_controls(client: BackendApiClient, message: dict) -> None:

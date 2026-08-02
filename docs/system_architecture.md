@@ -136,6 +136,7 @@ sequenceDiagram
     participant A as AgentChatService
     participant R as Agent Router
     participant S as SemanticSearchService
+    participant Cache as SQLite 回答缓存
     participant C as Chroma
     participant DB as SQLite
     participant P as RagPromptService
@@ -144,6 +145,12 @@ sequenceDiagram
     U->>A: 提交问题
     A->>R: 判断问题类型
     R-->>A: knowledge_qa
+    A->>Cache: 查询精确问题缓存
+    alt 缓存命中
+        Cache-->>A: 回答 + 引用 + 原检索证据
+        A->>DB: 保存本轮消息和检索日志
+        A-->>U: 缓存回答 + 引用来源
+    else 缓存未命中
     A->>S: search(question, knowledge_base_id)
     S->>S: 问题 Embedding
     S->>C: 按知识库过滤并查询 Top-K
@@ -156,8 +163,10 @@ sequenceDiagram
     P-->>A: system prompt + user prompt
     A->>L: 生成回答
     L-->>A: 回答和 Token 用量
+    A->>Cache: 写入带 TTL 的回答缓存
     A->>DB: 保存消息、引用、检索日志和执行步骤
     A-->>U: 回答 + 引用来源
+    end
 ```
 
 ### 为什么还要回查 SQLite
@@ -222,6 +231,7 @@ flowchart TD
 
 - 知识库：`knowledge_bases`、`documents`、`document_chunks`、`vector_indexes`
 - 问答：`conversations`、`messages`、`retrieval_logs`
+- 缓存：`rag_answer_caches`
 - Agent：`agent_runs`、`agent_steps`
 - 增强功能：`answer_feedbacks`、`document_summaries`、`document_faqs`
 - 可观测性：`model_usage_logs`
@@ -311,8 +321,22 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 - 模型客户端设置请求超时和有限重试，连接或超时错误转换为 `503`。
 - 离线评估集用预期文件名和关键事实词标注，不依赖会随重切分变化的 Chunk ID。
 - 评估输出 Hit Rate@K、MRR 和关键词召回率，用于比较 Chunk、Top-K、Embedding 或 Rerank 调整前后的效果。
+- 回答缓存记录有效条目、累计命中和基于首次模型用量估算的节省 Token。
 
-## 12. 可替换边界
+## 12. 高频回答缓存
+
+缓存仅用于 `knowledge_qa`，单文档总结、对比和追问仍按各自工具执行。缓存键包含知识库 ID、
+规范化问题、Top-K、Chat/Embedding 模型、距离阈值、候选倍数、Prompt 哈希和手动版本号。
+因此相同文本在不同知识库、模型或检索配置下不会错误复用。
+
+命中后系统跳过 Embedding、Chroma 和 Chat LLM，但仍保存本轮用户消息、助手消息和检索日志，
+保证会话历史完整。缓存默认 1 小时过期，回写时惰性清理过期记录。
+
+文档重新切分或建立新索引前，会先提交整个知识库的缓存失效。这个顺序宁可降低命中率，
+也不允许内容变化后继续返回旧答案。当前是 SQLite 持久化精确缓存；高并发多实例场景可换 Redis，
+并增加分布式锁处理缓存击穿。
+
+## 13. 可替换边界
 
 ### Chroma 升级 pgvector
 
@@ -332,17 +356,18 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 
 FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue。
 
-## 13. 当前边界
+## 14. 当前边界
 
 - PDF 仅支持带文本层的文件，尚未实现 OCR 和结构化表格解析。
 - 未实现登录、多租户和细粒度知识库权限。
 - 已有小规模离线检索评估，尚未实现 BM25 混合检索、Rerank 和大规模标注集。
 - SQLite + Chroma 适合本地演示，不代表高并发生产部署方案。
 - Router 是单次决策，不包含完整 ReAct 循环和自主反思。
+- 回答缓存是精确匹配，不是可能误复用答案的语义缓存；当前未实现多实例防击穿锁。
 
 清楚说明边界比把项目包装成“大型企业平台”更适合应届生面试。
 
-## 14. 三分钟面试讲解
+## 15. 三分钟面试讲解
 
 可以按照以下顺序介绍：
 

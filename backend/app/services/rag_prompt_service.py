@@ -24,14 +24,18 @@ class RagPromptService:
 
     qa_system_message = """你是 KnowFlow AI 企业知识库助手。请严格依据参考资料回答问题，不要把资料外的常识当作事实补充。
 如果参考资料不足以直接回答问题，请明确回答“知识库中没有足够依据”。回答中的事实结论应使用 [编号] 标注对应参考资料。"""
+    qa_user_message_template = """请使用以下参考资料回答用户问题。
+
+{source_blocks}
+
+用户问题：{question}"""
 
     def build(self, question: str, sources: list[PromptSource]) -> RagPrompt:
         return RagPrompt(
             system_message=self.qa_system_message,
-            user_message=(
-                "请使用以下参考资料回答用户问题。\n\n"
-                f"{self._build_source_blocks(sources)}\n\n"
-                f"用户问题：{question}"
+            user_message=self.qa_user_message_template.format(
+                source_blocks=self._build_source_blocks(sources),
+                question=question,
             ),
         )
 

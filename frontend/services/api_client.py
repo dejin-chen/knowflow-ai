@@ -91,6 +91,18 @@ class BackendApiClient:
             f"/knowledge-bases/{knowledge_base_id}/conversations",
         )
 
+    def get_rag_cache_stats(self, knowledge_base_id: int) -> dict[str, Any]:
+        return self._request(
+            "GET",
+            f"/knowledge-bases/{knowledge_base_id}/cache/stats",
+        )
+
+    def clear_rag_answer_cache(self, knowledge_base_id: int) -> dict[str, Any]:
+        return self._request(
+            "DELETE",
+            f"/knowledge-bases/{knowledge_base_id}/cache",
+        )
+
     def list_conversation_messages(self, conversation_id: int) -> list[dict[str, Any]]:
         return self._request("GET", f"/conversations/{conversation_id}/messages")
 

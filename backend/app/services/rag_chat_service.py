@@ -9,6 +9,7 @@ from app.repositories.message_repository import MessageRepository
 from app.repositories.retrieval_log_repository import RetrievalLogRepository
 from app.services.chat_completion_service import ChatCompletionResult, ChatCompletionService
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.rag_answer_cache_service import RagAnswerCacheService
 from app.services.rag_prompt_service import PromptSource, RagPromptService
 from app.services.semantic_search_service import RetrievedChunk, SemanticSearchService
 
@@ -20,6 +21,7 @@ class RagChatResult:
     citations: list[dict]
     retrieved_chunk_count: int
     insufficient_evidence: bool
+    cache_hit: bool = False
     assistant_message_id: int | None = None
     model_usage: ChatCompletionResult | None = None
 
@@ -34,6 +36,7 @@ class RagChatService:
         db: Session,
         semantic_search_service: SemanticSearchService | None = None,
         chat_completion_service: ChatCompletionService | None = None,
+        answer_cache_service: RagAnswerCacheService | None = None,
     ) -> None:
         self.conversation_repository = ConversationRepository(db)
         self.message_repository = MessageRepository(db)
@@ -41,6 +44,7 @@ class RagChatService:
         self.knowledge_base_service = KnowledgeBaseService(db)
         self.semantic_search_service = semantic_search_service or SemanticSearchService(db)
         self.chat_completion_service = chat_completion_service or ChatCompletionService()
+        self.answer_cache_service = answer_cache_service or RagAnswerCacheService(db)
         self.prompt_service = RagPromptService()
 
     def ask(
@@ -63,6 +67,38 @@ class RagChatService:
         )
 
         actual_top_k = top_k or settings.retrieval_top_k
+        cached_answer = self.answer_cache_service.get(
+            knowledge_base_id,
+            question,
+            actual_top_k,
+        )
+        if cached_answer is not None:
+            assistant_message = self.message_repository.create(
+                conversation_id=conversation.id,
+                role="assistant",
+                content=cached_answer.answer,
+                citations=cached_answer.citations,
+            )
+            self.retrieval_log_repository.create(
+                conversation_id=conversation.id,
+                user_message_id=user_message.id,
+                assistant_message_id=assistant_message.id,
+                knowledge_base_id=knowledge_base_id,
+                query=question,
+                top_k=actual_top_k,
+                best_distance=cached_answer.best_distance,
+                retrieved_chunks=cached_answer.retrieved_chunks,
+            )
+            return RagChatResult(
+                conversation_id=conversation.id,
+                answer=cached_answer.answer,
+                citations=cached_answer.citations,
+                retrieved_chunk_count=cached_answer.retrieved_chunk_count,
+                insufficient_evidence=cached_answer.insufficient_evidence,
+                cache_hit=True,
+                assistant_message_id=assistant_message.id,
+            )
+
         retrieved_chunks = self.semantic_search_service.search(
             knowledge_base_id=knowledge_base_id,
             query=question,
@@ -94,6 +130,9 @@ class RagChatService:
             content=answer,
             citations=citations,
         )
+        serialized_retrieved_chunks = [
+            self._serialize_retrieved_chunk(chunk) for chunk in retrieved_chunks
+        ]
         self.retrieval_log_repository.create(
             conversation_id=conversation.id,
             user_message_id=user_message.id,
@@ -102,7 +141,19 @@ class RagChatService:
             query=question,
             top_k=actual_top_k,
             best_distance=best_distance,
-            retrieved_chunks=[self._serialize_retrieved_chunk(chunk) for chunk in retrieved_chunks],
+            retrieved_chunks=serialized_retrieved_chunks,
+        )
+        self.answer_cache_service.store(
+            knowledge_base_id=knowledge_base_id,
+            question=question,
+            top_k=actual_top_k,
+            answer=answer,
+            citations=citations,
+            retrieved_chunks=serialized_retrieved_chunks,
+            retrieved_chunk_count=len(retrieved_chunks),
+            best_distance=best_distance,
+            insufficient_evidence=insufficient_evidence,
+            source_total_tokens=model_usage.total_tokens if model_usage is not None else 0,
         )
 
         return RagChatResult(
@@ -111,6 +162,7 @@ class RagChatService:
             citations=citations,
             retrieved_chunk_count=len(retrieved_chunks),
             insufficient_evidence=insufficient_evidence,
+            cache_hit=False,
             assistant_message_id=assistant_message.id,
             model_usage=model_usage,
         )

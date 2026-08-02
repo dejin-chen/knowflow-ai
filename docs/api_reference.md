@@ -69,6 +69,8 @@ POST /knowledge-bases
 | POST | `/documents/{document_id}/faqs` | 生成或替换 FAQ |
 | POST | `/knowledge-bases/{knowledge_base_id}/search` | 语义检索 |
 | POST | `/knowledge-bases/{knowledge_base_id}/chat` | RAG / Agent 问答 |
+| GET | `/knowledge-bases/{knowledge_base_id}/cache/stats` | 查看回答缓存统计 |
+| DELETE | `/knowledge-bases/{knowledge_base_id}/cache` | 手动清空回答缓存 |
 | GET | `/knowledge-bases/{knowledge_base_id}/conversations` | 获取会话列表 |
 | GET | `/conversations/{conversation_id}/messages` | 获取会话消息 |
 | POST | `/messages/{assistant_message_id}/feedback` | 提交回答反馈 |
@@ -504,6 +506,7 @@ Router 可能返回四种 `intent`：
   ],
   "retrieved_chunk_count": 3,
   "insufficient_evidence": false,
+  "cache_hit": false,
   "intent": "knowledge_qa",
   "execution_steps": [
     {
@@ -544,6 +547,7 @@ Router 可能返回四种 `intent`：
   "citations": [],
   "retrieved_chunk_count": 0,
   "insufficient_evidence": true,
+  "cache_hit": false,
   "intent": "knowledge_qa",
   "model_usages": []
 }
@@ -554,6 +558,38 @@ Router 可能返回四种 `intent`：
 
 当用户说“请总结这份文档”但没有提供可匹配文件名时，Router 返回
 `clarification`，不执行检索或 LLM 调用。
+
+### 回答缓存
+
+普通问答会先使用知识库、规范化问题、Top-K、模型与检索配置生成缓存键。命中时
+`cache_hit=true`，`model_usages=[]`，系统复用原回答、引用和检索证据，但仍保存本轮会话记录。
+
+`GET /api/knowledge-bases/{knowledge_base_id}/cache/stats`
+
+```json
+{
+  "knowledge_base_id": 1,
+  "enabled": true,
+  "ttl_seconds": 3600,
+  "entry_count": 8,
+  "hit_count": 21,
+  "estimated_chat_tokens_saved": 18640
+}
+```
+
+`estimated_chat_tokens_saved` 使用“缓存命中次数 × 首次回答总 Token”估算，只统计省去的 Chat LLM
+Token，不包含 Embedding Token，也不等同于费用账单。
+
+`DELETE /api/knowledge-bases/{knowledge_base_id}/cache`
+
+```json
+{
+  "knowledge_base_id": 1,
+  "deleted_entry_count": 8
+}
+```
+
+文档重新切分、建立新索引或删除知识库时会自动失效缓存；手动接口用于调试或配置变更后立即清理。
 
 ## 10. 会话历史
 

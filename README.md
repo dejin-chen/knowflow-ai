@@ -20,6 +20,7 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 - 文档重处理时同步清理旧向量，并使旧摘要和 FAQ 失效
 - 删除知识库时级联清理 SQLite、Chroma 与上传文件
 - 带引用来源、资料不足判断和会话历史的 RAG 问答
+- 高频精确问题回答缓存，命中时跳过 Embedding 与 Chat LLM
 - 普通问答、文档总结、多文档对比和信息追问的轻量 Agent Router
 - Agent 执行步骤、检索日志和模型 Token 用量记录
 - 请求 ID、存活/就绪检查和模型调用超时保护
@@ -43,6 +44,7 @@ flowchart LR
     AR --> DT["总结 / 对比 / 追问工具"]
     RAG --> EMB["Embedding API"]
     RAG --> LLM["Chat LLM API"]
+    RAG --> CACHE[("SQLite 回答缓存")]
     S --> DB[("SQLite")]
     S --> VS[("Chroma")]
     S --> FS[("上传文件")]
@@ -50,7 +52,7 @@ flowchart LR
 
 三类存储各自负责不同数据：
 
-- SQLite 保存知识库、文档、Chunk 正文、会话、日志和引用关系，是业务数据来源。
+- SQLite 保存知识库、文档、Chunk 正文、回答缓存、会话、日志和引用关系，是业务数据来源。
 - Chroma 保存 Chunk 向量、检索 metadata 和索引副本，负责语义相似度召回。
 - 文件目录保存用户上传的原始文档，数据库只记录其存储路径和元信息。
 
@@ -75,6 +77,9 @@ flowchart LR
 ```text
 用户问题
 → Agent Router 判断意图
+→ 生成包含知识库、问题、Top-K、模型与 Prompt 版本的缓存键
+→ 命中有效缓存时直接复用回答和证据，跳过 Embedding 与 Chat LLM
+→ 未命中时进入正常 RAG 流程
 → 问题向量化
 → Chroma 在指定知识库内扩大召回候选
 → 根据 metadata 回查 SQLite 中的 Chunk 和文档来源
@@ -212,11 +217,11 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-项目现有 39 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
+项目现有 44 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
 RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
 多存储一致性。生命周期测试会验证旧向量清理、数据库失败补偿、
 派生数据失效、SQLite 外键和内部路径隐藏；可靠性测试还覆盖流式上传、
-PDF 解析、请求追踪、模型超时和检索评估指标。
+PDF 解析、请求追踪、模型超时、检索评估指标和回答缓存生命周期。
 
 GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时，
 自动执行后端 pytest 和前端 Python 语法检查。详见
@@ -233,6 +238,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - 摘要、FAQ 和多文档对比会调用 LLM；普通语义检索只调用 Embedding。
 - 评估集使用文件名和关键事实词标注，不绑定会随重切分变化的 Chunk ID。
 - 存活检查只表示进程可响应；就绪检查还验证 SQLite 和 Chroma 可访问。
+- 回答缓存只匹配规范化后完全相同的问题；TTL、配置签名和索引变更失效共同防止旧答案复用。
 - 项目暂不加入复杂权限、多租户和多 Agent 编排，优先保证完整性与可讲解性。
 
 ## 中文文档
@@ -241,6 +247,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - [中文接口文档](docs/api_reference.md)
 - [RAG 工程加固](docs/stage_09_rag_hardening.md)
 - [可靠性与检索评估](docs/stage_09_reliability_and_evaluation.md)
+- [RAG 高频回答缓存](docs/stage_10_rag_answer_cache.md)
 - [简历与面试讲解](docs/resume_project_guide.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)

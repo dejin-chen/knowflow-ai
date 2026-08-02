@@ -40,3 +40,8 @@ class KnowledgeBase(Base):
         back_populates="knowledge_base",
         cascade="all, delete-orphan",
     )
+    answer_caches = relationship(
+        "RagAnswerCache",
+        back_populates="knowledge_base",
+        cascade="all, delete-orphan",
+    )

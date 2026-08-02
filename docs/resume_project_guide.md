@@ -14,14 +14,14 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 1. 基于 FastAPI、Streamlit、SQLAlchemy 和 Chroma 独立开发企业知识库 RAG
    问答平台，完成知识库管理、文档切分、Embedding、语义检索、带引用问答和会话持久化，
-   支持 TXT、Markdown 和文本型 PDF，提供 19 个 API 操作与中文演示页面。
+   支持 TXT、Markdown 和文本型 PDF，提供 21 个 API 操作与中文演示页面。
 2. 设计轻量 Agent Router，通过结构化意图在知识问答、文档总结、多文档对比和信息追问
    4 类工具之间路由，并持久化 Agent 执行步骤、检索日志和模型 Token 用量。
 3. 实现 RAG 索引生命周期治理，在文档重处理和知识库删除场景下联动清理 SQLite、
    Chroma 与原始文件；使用事务、失败补偿和派生数据失效机制降低悬空向量与过期引用风险。
-4. 建立可版本化的离线检索评估集，计算 Hit Rate@K、MRR 和关键词召回率；实现流式上传、
-   文件大小限制、请求 ID、依赖就绪检查及模型超时保护，增强异常场景可诊断性。
-5. 使用 pytest 建立 39 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
+4. 建立带 TTL、配置签名和索引变更失效的高频回答缓存，命中时跳过 Embedding 与 Chat LLM，
+   统计累计命中和估算节省 Token；使用离线评估集计算 Hit Rate@K、MRR 和关键词召回率。
+5. 使用 pytest 建立 44 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
    配置 GitHub Actions 在主分支推送和 Pull Request 时自动执行后端测试与前端检查。
 
 ### 精简版本
@@ -30,8 +30,9 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 > 基于 FastAPI、Streamlit、SQLite 与 Chroma 开发企业知识库 RAG 平台，
 > 实现文档切分、向量检索、带引用问答和 4 类意图 Agent Router；设计跨 SQLite、
-> Chroma 和文件存储的索引生命周期与失败补偿机制，增加可量化检索评估与请求可观测性，
-> 并使用 39 个 pytest 测试、Docker Compose 和 GitHub Actions 保障交付质量。
+> Chroma 和文件存储的索引生命周期与失败补偿机制，增加高频回答缓存、可量化检索评估与
+> 请求可观测性，并使用 44 个 pytest 测试、
+> Docker Compose 和 GitHub Actions 保障交付质量。
 
 ## 3. 不要写进简历的表述
 
@@ -80,7 +81,7 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第六部分：工程保障
 
-> 项目现在有 19 个 API 操作、13 张业务表和 39 个测试。Docker Compose 负责统一运行环境，
+> 项目现在有 21 个 API 操作、14 张业务表和 44 个测试。Docker Compose 负责统一运行环境，
 > GitHub Actions 在每次推送后自动运行测试。我还增加了请求 ID、就绪检查、模型超时和
 > 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户、混合检索和 Rerank。
 
@@ -163,6 +164,12 @@ MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越�
 一次性 `read()` 会让大文件完整进入内存，并发上传时容易放大内存占用。分块读取让单次
 写入占用可控，再配合大小限制和异常清理，避免超大文件与半成品文件长期占用磁盘。
 
+### 16. 高频回答缓存怎样避免返回旧答案？
+
+缓存只匹配同知识库、规范化后完全相同的问题，并把 Top-K、模型、检索阈值和 Prompt 哈希放入键中。
+默认 TTL 是 1 小时；文档重新切分或建立新索引前会清空整个知识库缓存。当前不做语义相似缓存，
+因为条件略有差异的问题可能需要不同答案。
+
 ## 6. 面试演示顺序
 
 建议演示 5 到 8 分钟：
@@ -181,10 +188,10 @@ MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越�
 
 面试前可以记住这些真实数字：
 
-- 19 个 FastAPI API 操作
-- 13 张 SQLAlchemy 业务表
+- 21 个 FastAPI API 操作
+- 14 张 SQLAlchemy 业务表
 - 4 类 Agent 意图
-- 39 个 pytest 测试
+- 44 个 pytest 测试
 - 2 个 Docker Compose 服务
 - 3 类持久化位置：SQLite、Chroma、uploads
 - 3 个检索评估指标：Hit Rate@K、MRR、关键词召回率

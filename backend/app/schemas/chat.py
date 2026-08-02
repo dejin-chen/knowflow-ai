@@ -35,6 +35,7 @@ class ChatResponse(BaseModel):
     citations: list[ChatCitationRead]
     retrieved_chunk_count: int
     insufficient_evidence: bool
+    cache_hit: bool
     intent: AgentIntent
     execution_steps: list[AgentExecutionStep]
     model_usages: list[ModelUsageRead]

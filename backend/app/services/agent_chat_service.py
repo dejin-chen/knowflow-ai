@@ -26,6 +26,7 @@ class AgentChatResult:
     citations: list[dict]
     retrieved_chunk_count: int
     insufficient_evidence: bool
+    cache_hit: bool
     intent: AgentIntent
     execution_steps: list[AgentExecutionStep]
     model_usages: list[dict]
@@ -147,7 +148,12 @@ class AgentChatService:
             name="检索知识库并生成回答",
             tool_name="search_knowledge_base",
             status="completed",
-            detail=f"返回 {rag_result.retrieved_chunk_count} 个检索片段。",
+            detail=(
+                f"命中回答缓存，复用 {rag_result.retrieved_chunk_count} 个检索片段，"
+                "未调用 Embedding 和聊天模型。"
+                if rag_result.cache_hit
+                else f"返回 {rag_result.retrieved_chunk_count} 个检索片段。"
+            ),
         )
         return AgentChatResult(
             conversation_id=rag_result.conversation_id,
@@ -156,6 +162,7 @@ class AgentChatService:
             citations=rag_result.citations,
             retrieved_chunk_count=rag_result.retrieved_chunk_count,
             insufficient_evidence=rag_result.insufficient_evidence,
+            cache_hit=rag_result.cache_hit,
             intent=AgentIntent.KNOWLEDGE_QA,
             execution_steps=[routing_step, tool_step],
             model_usages=model_usages,
@@ -208,6 +215,7 @@ class AgentChatService:
             citations=tool_result.citations,
             retrieved_chunk_count=tool_result.source_chunk_count,
             insufficient_evidence=False,
+            cache_hit=False,
             intent=intent,
             execution_steps=[routing_step, tool_step],
             model_usages=model_usages,
@@ -253,6 +261,7 @@ class AgentChatService:
             citations=[],
             retrieved_chunk_count=0,
             insufficient_evidence=False,
+            cache_hit=False,
             intent=AgentIntent.CLARIFICATION,
             execution_steps=[routing_step, tool_step],
             model_usages=[],

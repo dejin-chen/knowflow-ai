@@ -11,6 +11,7 @@ from app.models.document_summary import DocumentSummary
 from app.models.knowledge_base import KnowledgeBase
 from app.models.message import Message
 from app.models.model_usage_log import ModelUsageLog
+from app.models.rag_answer_cache import RagAnswerCache
 from app.models.retrieval_log import RetrievalLog
 from app.models.vector_index import VectorIndex
 
@@ -26,6 +27,7 @@ __all__ = [
     "KnowledgeBase",
     "Message",
     "ModelUsageLog",
+    "RagAnswerCache",
     "RetrievalLog",
     "VectorIndex",
 ]

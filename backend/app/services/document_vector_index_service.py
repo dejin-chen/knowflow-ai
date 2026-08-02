@@ -9,6 +9,7 @@ from app.repositories.document_chunk_repository import DocumentChunkRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.vector_index_repository import VectorIndexRepository
 from app.services.embedding_service import EmbeddingService
+from app.services.rag_answer_cache_service import RagAnswerCacheService
 from app.services.vector_store_service import ChromaVectorStoreService
 
 
@@ -30,6 +31,7 @@ class DocumentVectorIndexService:
         db: Session,
         embedding_service: EmbeddingService | None = None,
         vector_store: ChromaVectorStoreService | None = None,
+        answer_cache_service: RagAnswerCacheService | None = None,
     ) -> None:
         self.db = db
         self.document_repository = DocumentRepository(db)
@@ -37,6 +39,7 @@ class DocumentVectorIndexService:
         self.vector_index_repository = VectorIndexRepository(db)
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_store = vector_store or ChromaVectorStoreService()
+        self.answer_cache_service = answer_cache_service or RagAnswerCacheService(db)
 
     def index_document(self, document_id: int) -> DocumentIndexResult:
         document = self.document_repository.get_by_id(document_id)
@@ -52,6 +55,11 @@ class DocumentVectorIndexService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="文档尚未完成文本切分，无法建立向量索引",
             )
+
+        # 新索引可能改变检索排序，必须在写入前清空该知识库的旧回答缓存。
+        self.answer_cache_service.invalidate_knowledge_base(
+            document.knowledge_base_id
+        )
 
         # 只有 content 参与向量化；各类 ID 作为 Chroma metadata 保存，用于过滤和溯源。
         embeddings = self.embedding_service.embed_texts([chunk.content for chunk in chunks])

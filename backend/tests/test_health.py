@@ -17,3 +17,5 @@ def test_app_registers_health_route() -> None:
 
     assert "/api/health" in paths
     assert "/api/health/ready" in paths
+    assert "/api/knowledge-bases/{knowledge_base_id}/cache/stats" in paths
+    assert "/api/knowledge-bases/{knowledge_base_id}/cache" in paths

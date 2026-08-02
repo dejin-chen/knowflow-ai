@@ -8,6 +8,7 @@ from app.repositories.document_faq_repository import DocumentFaqRepository
 from app.repositories.document_repository import DocumentRepository
 from app.repositories.document_summary_repository import DocumentSummaryRepository
 from app.services.document_parser_service import DocumentParserService
+from app.services.rag_answer_cache_service import RagAnswerCacheService
 from app.services.text_splitter_service import TextSplitterService
 from app.services.vector_store_service import ChromaVectorStoreService
 
@@ -19,6 +20,7 @@ class DocumentChunkService:
         self,
         db: Session,
         vector_store: ChromaVectorStoreService | None = None,
+        answer_cache_service: RagAnswerCacheService | None = None,
     ) -> None:
         self.db = db
         self.document_repository = DocumentRepository(db)
@@ -26,6 +28,7 @@ class DocumentChunkService:
         self.summary_repository = DocumentSummaryRepository(db)
         self.faq_repository = DocumentFaqRepository(db)
         self.vector_store = vector_store or ChromaVectorStoreService()
+        self.answer_cache_service = answer_cache_service or RagAnswerCacheService(db)
         self.parser = DocumentParserService()
         self.splitter = TextSplitterService(
             chunk_size=settings.chunk_size,
@@ -47,6 +50,11 @@ class DocumentChunkService:
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="文档中没有可切分的有效文本",
             )
+
+        # 内容变化前先提交缓存失效。后续步骤即使失败，也只损失命中率，不会返回旧答案。
+        self.answer_cache_service.invalidate_knowledge_base(
+            document.knowledge_base_id
+        )
 
         # Chunk 是向量、摘要和 FAQ 的上游数据。重新切分时必须先让旧派生数据失效。
         self.vector_store.delete_by_document(document.id)
