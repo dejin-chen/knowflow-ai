@@ -35,7 +35,7 @@ KnowFlow AI 是一个面向企业内部制度和项目资料的知识库 RAG 问
 
 后端使用 FastAPI，并按 API、Service、Repository、Model、Schema 分层；SQLite 保存业务主数据和
 Chunk 正文，Chroma 负责向量召回，Streamlit 提供中文演示页面。项目目前有 21 个 API 操作、
-14 张业务表、4 类 Agent 意图和 46 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
+14 张业务表、4 类 Agent 意图和 50 个 pytest 测试，并使用 Docker Compose 和 GitHub Actions
 完成容器化与自动验收。
 
 ### 2. 这个项目解决了什么业务问题？
@@ -322,8 +322,9 @@ Embedding 召回通常追求快和高召回率，Reranker 对“问题 + 候选�
 相关内容排到前面。直接增加 Top-K 会增加噪声、Token 和延迟，模型不一定能从大量相似片段中选择
 正确证据。
 
-典型流程是先召回较多候选，再 Rerank 取少量结果。当前项目未实现，下一步需要比较 MRR、延迟和
-成本后再决定是否值得加入。
+KnowFlow 当前在 `top_k × 3` 候选上实现轻量词法 Rerank，融合原始 cosine distance 和中文双字片段/
+英文词元覆盖率，不增加第二次模型调用。30 题开发集 HitRate@3 从 0.8000 提升到 0.9667，MRR 从
+0.6167 提升到 0.9000；但这不是 Cross-Encoder，正式指标还需要独立测试集复核。
 
 ### 29. 怎样降低 RAG 幻觉？
 
@@ -544,7 +545,7 @@ Docker 把 Python 版本、依赖、启动命令和目录约定封装成镜像�
 
 **参考回答：**
 
-项目有 46 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
+项目有 50 个 pytest 测试，覆盖健康检查、知识库、文档、Chunk、向量映射、RAG、Router、反馈、摘要、
 FAQ、Token、上传限制、PDF、请求追踪、模型超时、评估指标、回答缓存和跨存储失败补偿。CI 使用 `-W error`，
 警告也会让测试失败。
 
@@ -683,10 +684,11 @@ Redis，并使用分布式锁或 singleflight 防止热点缓存失效后大量�
 > 项目还实现了轻量 Agent Router，在普通问答、文档总结、多文档对比和追问之间选择工具。工程上最有
 > 价值的是跨 SQLite、Chroma、原文件的索引生命周期与失败补偿，以及 Hit Rate@K、MRR 和关键词召回率
 > 离线评估。普通问答还支持带 TTL 和索引变更失效的高频回答缓存，命中后跳过 Embedding、Chroma 和
-> 聊天模型，同时保留会话与检索日志。现在有 21 个 API 操作、14 张表、46 个测试，并通过 Docker
-> Compose 和 GitHub Actions 验证。
+> 聊天模型，同时保留会话与检索日志。检索候选还会经过不调用额外模型的轻量词法 Rerank。现在有
+> 21 个 API 操作、14 张表、50 个测试，并通过 Docker Compose 和 GitHub Actions 验证。
 >
-> 当前边界是没有登录、多租户、OCR、混合检索和 Rerank。我能说明这些功能如何增加，但不会说成已经实现。
+> 当前边界是没有登录、多租户、OCR、BM25 混合召回和 Cross-Encoder Rerank。我能说明这些功能如何增加，
+> 但不会说成已经实现。
 
 ## 11. 面试前必须亲自完成的练习
 

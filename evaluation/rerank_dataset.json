@@ -1,0 +1,215 @@
+{
+  "name": "KnowFlow 员工手册轻量 Rerank 评估集 v1",
+  "cases": [
+    {
+      "case_id": "attendance-hours-001",
+      "question": "公司的标准上下班时间和午休时间分别是什么？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["9:30 至 18:30", "12:00 至 13:00"],
+      "top_k": 3
+    },
+    {
+      "case_id": "attendance-missed-punch-001",
+      "question": "因设备故障没有打卡，需要在多久内补交申请？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["三个工作日内", "补卡申请"],
+      "top_k": 3
+    },
+    {
+      "case_id": "attendance-late-001",
+      "question": "迟到多少分钟且每月不超过几次可以通过补卡说明处理？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["不超过 15 分钟", "不超过两次"],
+      "top_k": 3
+    },
+    {
+      "case_id": "sick-emergency-001",
+      "question": "突发急诊来不及走系统时应该先通知谁，之后何时补申请？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["通知直属主管", "第一个工作日补交申请"],
+      "top_k": 3
+    },
+    {
+      "case_id": "sick-materials-001",
+      "question": "普通病假申请可以提交哪些医疗证明材料？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["诊断证明", "病历摘要", "就诊记录"],
+      "top_k": 3
+    },
+    {
+      "case_id": "sick-long-001",
+      "question": "连续休病假超过三天还要补充哪种证明？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["正式病假证明原件", "电子材料"],
+      "top_k": 3
+    },
+    {
+      "case_id": "annual-leave-001",
+      "question": "申请年休假最少要提前几个工作日？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["至少提前三个工作日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "personal-leave-001",
+      "question": "个人事假原则上需要提前多久发起？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["至少提前一个工作日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "expense-deadline-001",
+      "question": "业务费用发生后最迟多少天必须提交报销？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["30 个自然日内"],
+      "top_k": 3
+    },
+    {
+      "case_id": "expense-materials-001",
+      "question": "提交费用报销时需要准备发票之外的哪些材料？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["付款凭证", "订单或行程单", "费用明细"],
+      "top_k": 3
+    },
+    {
+      "case_id": "travel-domestic-001",
+      "question": "国内出差原则上至少提前多少个工作日申请？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["至少提前两个工作日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "travel-international-001",
+      "question": "国际出差涉及签证时至少要提前多久沟通？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["至少提前十个工作日"],
+      "top_k": 3
+    },
+    {
+      "case_id": "travel-reimbursement-001",
+      "question": "结束出差返程以后，应在几个工作日内完成报销？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["五个工作日内"],
+      "top_k": 3
+    },
+    {
+      "case_id": "security-login-001",
+      "question": "发现账号异常登录后，安全事件说明最迟多久提交？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["信息安全响应邮箱", "两小时内"],
+      "top_k": 3
+    },
+    {
+      "case_id": "security-ai-001",
+      "question": "使用生成式 AI 工作时，哪些敏感内容禁止输入？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["客户身份证明", "生产环境密钥", "未公开财务数据"],
+      "top_k": 3
+    },
+    {
+      "case_id": "remote-approval-001",
+      "question": "员工在什么审批条件下可以远程办公？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["经直属主管批准"],
+      "top_k": 3
+    },
+    {
+      "case_id": "device-lost-001",
+      "question": "公司设备遗失或被盗以后必须通知哪些部门？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["行政和信息安全部门"],
+      "top_k": 3
+    },
+    {
+      "case_id": "purchase-low-001",
+      "question": "不超过三千元的常规采购由谁批准？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["部门负责人审批"],
+      "top_k": 3
+    },
+    {
+      "case_id": "purchase-medium-001",
+      "question": "采购金额在三千元以上、两万元以内需要谁共同审批？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["部门负责人和财务部共同审批"],
+      "top_k": 3
+    },
+    {
+      "case_id": "purchase-high-001",
+      "question": "超过两万元的采购还需要增加哪一级审批？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["采购委员会", "公司授权负责人"],
+      "top_k": 3
+    },
+    {
+      "case_id": "project-change-001",
+      "question": "项目需求发生变化时负责人要记录哪些内容？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["影响范围", "工期评估", "客户确认情况"],
+      "top_k": 3
+    },
+    {
+      "case_id": "project-promise-001",
+      "question": "没有项目负责人批准时，员工不能向客户承诺什么？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["上线日期", "定制开发范围", "服务等级"],
+      "top_k": 3
+    },
+    {
+      "case_id": "project-complaint-001",
+      "question": "客户重大投诉或合同争议应该升级给哪些角色？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["项目负责人", "客户成功团队", "法务联系人"],
+      "top_k": 3
+    },
+    {
+      "case_id": "project-archive-001",
+      "question": "项目完成后应归档哪些交付材料？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["需求", "设计", "测试", "验收", "复盘材料"],
+      "top_k": 3
+    },
+    {
+      "case_id": "performance-cycle-001",
+      "question": "公司多长时间进行一次目标回顾和绩效沟通？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["每季度进行一次"],
+      "top_k": 3
+    },
+    {
+      "case_id": "training-expense-001",
+      "question": "外部培训费用报销之前需要完成什么手续？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["提前申请", "课程目标", "预期产出"],
+      "top_k": 3
+    },
+    {
+      "case_id": "emergency-report-001",
+      "question": "紧急事件处理结束后多久需要提交事件经过？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["一个工作日内", "影响范围", "后续改进建议"],
+      "top_k": 3
+    },
+    {
+      "case_id": "service-finance-001",
+      "question": "发票、报销和付款流程应该咨询哪个服务台？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["财务服务台"],
+      "top_k": 3
+    },
+    {
+      "case_id": "service-it-001",
+      "question": "账号、设备、软件和网络问题由哪个服务台负责？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["IT 服务台"],
+      "top_k": 3
+    },
+    {
+      "case_id": "service-legal-001",
+      "question": "合同、知识产权和合规问题应该找谁？",
+      "expected_filenames": ["knowflow_demo_handbook.md"],
+      "expected_keywords": ["法务联系人"],
+      "top_k": 3
+    }
+  ]
+}

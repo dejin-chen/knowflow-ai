@@ -67,6 +67,8 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 3
     retrieval_candidate_multiplier: int = Field(default=3, ge=1, le=10)
     retrieval_distance_threshold: float = 0.6
+    retrieval_rerank_enabled: bool = True
+    retrieval_rerank_lexical_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     rag_answer_cache_enabled: bool = True
     rag_answer_cache_ttl_seconds: int = Field(default=3600, ge=60, le=604800)
     rag_answer_cache_version: str = Field(default="v1", min_length=1, max_length=50)

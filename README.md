@@ -16,7 +16,7 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 - 上传文件分块写盘、10 MB 默认限制和异常残留文件清理
 - 文本清洗、可配置 Chunk 切分和位置记录
 - OpenAI 兼容 Embedding 接口与 Chroma 向量索引
-- 候选扩大召回、同文档重复正文去重与 Top-K 语义检索
+- 候选扩大召回、重复正文去重与无额外模型调用的轻量词法 Rerank
 - 文档重处理时同步清理旧向量，并使旧摘要和 FAQ 失效
 - 删除知识库时级联清理 SQLite、Chroma 与上传文件
 - 带引用来源、资料不足判断和会话历史的 RAG 问答
@@ -83,7 +83,9 @@ flowchart LR
 → 问题向量化
 → Chroma 在指定知识库内扩大召回候选
 → 根据 metadata 回查 SQLite 中的 Chunk 和文档来源
-→ 去除同一文档中的重复正文并截取 Top-K
+→ 去除同一文档中的重复正文
+→ 融合向量分数与词法覆盖率执行轻量 Rerank
+→ 截取最终 Top-K
 → 判断检索依据是否充足
 → 构造带编号资料的 RAG Prompt
 → LLM 生成带引用回答
@@ -217,7 +219,7 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-项目现有 46 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
+项目现有 50 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
 RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
 多存储一致性。生命周期测试会验证旧向量清理、数据库失败补偿、
 派生数据失效、SQLite 外键和内部路径隐藏；可靠性测试还覆盖流式上传、
@@ -240,6 +242,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - 存活检查只表示进程可响应；就绪检查还验证 SQLite 和 Chroma 可访问。
 - 回答缓存只匹配规范化后完全相同的问题；TTL、配置签名和索引变更失效共同防止旧答案复用，
   单知识库与全局容量上限通过 LRU 批量淘汰避免缓存表无限增长。
+- 轻量词法 Rerank 只重排扩大召回候选，不增加模型调用；正确证据未进入候选时不会伪造提升。
 - 项目暂不加入复杂权限、多租户和多 Agent 编排，优先保证完整性与可讲解性。
 
 ## 中文文档
@@ -249,6 +252,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - [RAG 工程加固](docs/stage_09_rag_hardening.md)
 - [可靠性与检索评估](docs/stage_09_reliability_and_evaluation.md)
 - [RAG 高频回答缓存](docs/stage_10_rag_answer_cache.md)
+- [轻量词法 Rerank 与对比评估](docs/stage_11_lightweight_rerank.md)
 - [简历与面试讲解](docs/resume_project_guide.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)
@@ -260,6 +264,6 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 
 - 增加 PostgreSQL + pgvector 迁移方案
 - 补充用户登录与知识库访问控制
-- 增加 BM25 混合检索和 Rerank，并使用现有评估集验证收益
+- 增加 BM25 混合召回，并在独立测试集上比较轻量词法与 Cross-Encoder Rerank
 - 将文档处理迁移到后台异步任务队列
 - 为扫描版 PDF 增加 OCR

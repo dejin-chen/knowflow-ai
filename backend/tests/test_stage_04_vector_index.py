@@ -176,7 +176,8 @@ def test_chroma_store_persists_vector_record(tmp_path) -> None:
         settings.chroma_collection_name = original_collection_name
 
 
-def test_semantic_search_rehydrates_chunks_and_sources() -> None:
+def test_semantic_search_rehydrates_chunks_and_sources(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "retrieval_rerank_enabled", False)
     engine = create_engine("sqlite:///:memory:", future=True)
     testing_session = sessionmaker(bind=engine)
     Base.metadata.create_all(bind=engine)

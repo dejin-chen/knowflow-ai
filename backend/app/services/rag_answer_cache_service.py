@@ -156,6 +156,8 @@ class RagAnswerCacheService:
             "embedding_model": settings.embedding_model,
             "distance_threshold": settings.retrieval_distance_threshold,
             "candidate_multiplier": settings.retrieval_candidate_multiplier,
+            "rerank_enabled": settings.retrieval_rerank_enabled,
+            "rerank_lexical_weight": settings.retrieval_rerank_lexical_weight,
             "prompt_hash": prompt_hash,
         }
         serialized_payload = json.dumps(

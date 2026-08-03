@@ -26,3 +26,4 @@ class RetrievedChunkRead(BaseModel):
     chunk_index: int
     content: str
     distance: float
+    rerank_score: float | None = None

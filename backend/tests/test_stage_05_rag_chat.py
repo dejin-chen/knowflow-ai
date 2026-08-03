@@ -128,3 +128,52 @@ def test_rag_chat_returns_insufficient_evidence_without_calling_llm() -> None:
         assert db.scalar(select(RetrievalLog)).best_distance is None
     finally:
         db.close()
+
+
+def test_rag_chat_uses_minimum_vector_distance_after_rerank() -> None:
+    db = build_database()
+    try:
+        knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="Rerank 证据阈值测试库")
+        )
+        reranked_chunks = [
+            RetrievedChunk(
+                chunk_id=1,
+                document_id=1,
+                knowledge_base_id=knowledge_base.id,
+                filename="制度.md",
+                chunk_index=1,
+                content="词法证据更明确的片段。",
+                distance=0.7,
+                rerank_score=0.8,
+            ),
+            RetrievedChunk(
+                chunk_id=2,
+                document_id=1,
+                knowledge_base_id=knowledge_base.id,
+                filename="制度.md",
+                chunk_index=2,
+                content="向量距离最近的片段。",
+                distance=0.2,
+                rerank_score=0.6,
+            ),
+        ]
+        fake_chat = FakeChatCompletionService()
+        service = RagChatService(
+            db,
+            semantic_search_service=FakeSemanticSearchService(reranked_chunks),
+            chat_completion_service=fake_chat,
+        )
+
+        result = service.ask(
+            knowledge_base_id=knowledge_base.id,
+            question="制度内容是什么？",
+            conversation_id=None,
+            top_k=2,
+        )
+
+        assert result.insufficient_evidence is False
+        assert fake_chat.last_prompt is not None
+        assert db.scalar(select(RetrievalLog)).best_distance == 0.2
+    finally:
+        db.close()

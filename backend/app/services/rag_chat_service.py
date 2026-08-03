@@ -104,7 +104,12 @@ class RagChatService:
             query=question,
             top_k=actual_top_k,
         )
-        best_distance = retrieved_chunks[0].distance if retrieved_chunks else None
+        # Rerank 会改变顺序，证据阈值仍使用候选中的最小原始向量距离。
+        best_distance = (
+            min(chunk.distance for chunk in retrieved_chunks)
+            if retrieved_chunks
+            else None
+        )
         insufficient_evidence = (
             not retrieved_chunks
             or best_distance is not None

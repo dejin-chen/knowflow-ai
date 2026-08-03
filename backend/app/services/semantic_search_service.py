@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.repositories.document_chunk_repository import DocumentChunkRepository
 from app.services.embedding_service import EmbeddingService
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.lightweight_rerank_service import LightweightRerankService
 from app.services.vector_store_service import ChromaVectorStoreService, VectorSearchMatch
 
 
@@ -18,6 +19,7 @@ class RetrievedChunk:
     chunk_index: int
     content: str
     distance: float
+    rerank_score: float | None = None
 
 
 class SemanticSearchService:
@@ -28,11 +30,13 @@ class SemanticSearchService:
         db: Session,
         embedding_service: EmbeddingService | None = None,
         vector_store: ChromaVectorStoreService | None = None,
+        rerank_service: LightweightRerankService | None = None,
     ) -> None:
         self.knowledge_base_service = KnowledgeBaseService(db)
         self.chunk_repository = DocumentChunkRepository(db)
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_store = vector_store or ChromaVectorStoreService()
+        self.rerank_service = rerank_service or LightweightRerankService()
 
     def search(
         self,
@@ -49,7 +53,10 @@ class SemanticSearchService:
             top_k=candidate_top_k,
         )
         results = self._rehydrate_matches(matches, knowledge_base_id)
-        return self._deduplicate(results)[:top_k]
+        candidates = self._deduplicate(results)
+        if settings.retrieval_rerank_enabled:
+            candidates = self.rerank_service.rerank(query, candidates)
+        return candidates[:top_k]
 
     @staticmethod
     def _deduplicate(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

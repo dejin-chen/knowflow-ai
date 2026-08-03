@@ -1,0 +1,72 @@
+{
+  "report_name": "KnowFlow 轻量 Rerank 开发集对比报告",
+  "evaluated_at": "2026-08-03",
+  "dataset": "evaluation/rerank_dataset.json",
+  "dataset_case_count": 30,
+  "corpus": "sample_data/knowflow_demo_handbook.md",
+  "environment": {
+    "runtime": "本地 Docker Compose",
+    "embedding_model": "text-embedding-v2",
+    "top_k": 3,
+    "candidate_multiplier": 3,
+    "rerank_lexical_weight": 0.5
+  },
+  "baseline": {
+    "strategy": "纯向量排序",
+    "hit_rate_at_3": 0.8,
+    "mean_reciprocal_rank": 0.6167,
+    "mean_keyword_recall": 0.8
+  },
+  "rerank": {
+    "strategy": "50% 向量分数 + 50% 词法覆盖率",
+    "hit_rate_at_3": 0.9667,
+    "mean_reciprocal_rank": 0.9,
+    "mean_keyword_recall": 0.9667
+  },
+  "change": {
+    "hit_rate_at_3_percentage_points": 16.67,
+    "hit_rate_at_3_relative_percent": 20.84,
+    "mean_reciprocal_rank_absolute": 0.2833,
+    "mean_reciprocal_rank_relative_percent": 45.94,
+    "mean_keyword_recall_percentage_points": 16.67,
+    "mean_keyword_recall_relative_percent": 20.84
+  },
+  "cases": [
+    {"case_id": "attendance-hours-001", "baseline_rank": 2, "rerank_rank": 1},
+    {"case_id": "attendance-missed-punch-001", "baseline_rank": 2, "rerank_rank": 1},
+    {"case_id": "attendance-late-001", "baseline_rank": 2, "rerank_rank": 1},
+    {"case_id": "sick-emergency-001", "baseline_rank": null, "rerank_rank": 2},
+    {"case_id": "sick-materials-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "sick-long-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "annual-leave-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "personal-leave-001", "baseline_rank": 3, "rerank_rank": 2},
+    {"case_id": "expense-deadline-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "expense-materials-001", "baseline_rank": 2, "rerank_rank": 2},
+    {"case_id": "travel-domestic-001", "baseline_rank": 3, "rerank_rank": 1},
+    {"case_id": "travel-international-001", "baseline_rank": 2, "rerank_rank": 1},
+    {"case_id": "travel-reimbursement-001", "baseline_rank": null, "rerank_rank": 1},
+    {"case_id": "security-login-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "security-ai-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "remote-approval-001", "baseline_rank": 2, "rerank_rank": 2},
+    {"case_id": "device-lost-001", "baseline_rank": null, "rerank_rank": 1},
+    {"case_id": "purchase-low-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "purchase-medium-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "purchase-high-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "project-change-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "project-promise-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "project-complaint-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "project-archive-001", "baseline_rank": 1, "rerank_rank": 1},
+    {"case_id": "performance-cycle-001", "baseline_rank": 3, "rerank_rank": 1},
+    {"case_id": "training-expense-001", "baseline_rank": null, "rerank_rank": null},
+    {"case_id": "emergency-report-001", "baseline_rank": 2, "rerank_rank": 1},
+    {"case_id": "service-finance-001", "baseline_rank": null, "rerank_rank": 1},
+    {"case_id": "service-it-001", "baseline_rank": null, "rerank_rank": 1},
+    {"case_id": "service-legal-001", "baseline_rank": 1, "rerank_rank": 1}
+  ],
+  "limitations": [
+    "这是 30 题开发评估集，不是独立的 100 题最终测试集。",
+    "词法权重在开发集上确定，正式简历指标需要在未参与调参的测试集上复核。",
+    "training-expense-001 的正确证据没有进入扩大召回候选，Rerank 无法修复。",
+    "报告衡量检索排序质量，不等同于最终答案正确率。"
+  ]
+}

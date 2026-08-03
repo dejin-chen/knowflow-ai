@@ -31,6 +31,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="可选质量门槛，低于该命中率时返回非零退出码",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="可选 JSON 报告保存路径，父目录不存在时自动创建",
+    )
     return parser.parse_args()
 
 
@@ -58,7 +64,19 @@ def main() -> int:
         print(f"评估执行失败：{exc.detail}", file=sys.stderr)
         return 1
 
-    print(json.dumps(report.model_dump(), ensure_ascii=False, indent=2))
+    serialized_report = json.dumps(
+        report.model_dump(),
+        ensure_ascii=False,
+        indent=2,
+    )
+    print(serialized_report)
+    if args.output is not None:
+        try:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(serialized_report + "\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"评估报告保存失败：{exc}", file=sys.stderr)
+            return 2
     if args.min_hit_rate is not None and report.hit_rate_at_k < args.min_hit_rate:
         print(
             f"检索命中率 {report.hit_rate_at_k:.4f} 低于门槛 "
