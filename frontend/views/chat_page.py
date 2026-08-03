@@ -174,7 +174,7 @@ def _render_retrieval_details(message: dict) -> None:
 
 def _render_model_usage(message: dict) -> None:
     if message.get("cache_hit"):
-        st.caption("已命中高频回答缓存，本次未调用 Embedding 和聊天模型。")
+        st.caption("已命中高频回答缓存，本次未调用 Embedding、LLM Rerank 和回答模型。")
         return
 
     model_usages = message.get("model_usages", [])
@@ -183,8 +183,15 @@ def _render_model_usage(message: dict) -> None:
 
     with st.expander("模型用量"):
         for usage in model_usages:
+            operation_name = {
+                "llm_rerank": "候选重排",
+                "knowledge_qa": "问答生成",
+                "document_summary": "文档总结",
+                "document_comparison": "文档对比",
+            }.get(usage["operation"], usage["operation"])
             st.caption(
-                f"{usage['model_name']}；输入 {usage['prompt_tokens']} Token；"
+                f"{operation_name}；{usage['model_name']}；"
+                f"输入 {usage['prompt_tokens']} Token；"
                 f"输出 {usage['completion_tokens']} Token；"
                 f"总计 {usage['total_tokens']} Token"
             )
@@ -202,7 +209,7 @@ def _render_cache_status(client: BackendApiClient, knowledge_base_id: int) -> No
         entry_column.metric("有效缓存", stats["entry_count"])
         hit_column.metric("累计命中", stats["hit_count"])
         token_column.metric(
-            "估算节省聊天 Token",
+            "估算节省模型 Token",
             stats["estimated_chat_tokens_saved"],
         )
         st.caption(

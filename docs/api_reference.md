@@ -444,7 +444,10 @@ Token 用量。重复调用会更新已有摘要。
     "chunk_index": 0,
     "content": "员工申请病假时，需要提供医院出具的证明材料。",
     "distance": 0.2135,
-    "rerank_score": 0.6824
+    "rerank_score": null,
+    "vector_rank": 2,
+    "rerank_rank": 1,
+    "rerank_method": "llm"
   }
 ]
 ```
@@ -452,12 +455,13 @@ Token 用量。重复调用会更新已有摘要。
 `distance` 是 Chroma 返回的余弦距离，通常越小表示语义越接近。
 它不是百分制相似度，不应显示成“78.65% 准确率”。
 
-`rerank_score` 是当前候选集内的轻量融合排序分数，越大越靠前；它不是概率，也不能跨问题比较。
-关闭 Rerank 时该字段为 `null`。
+`vector_rank` 是 Chroma 召回并去重后的原始顺序，`rerank_rank` 是重排后的顺序。
+`rerank_method` 正常为 `llm`，模型调用或 JSON 校验失败时为 `lexical_fallback`，关闭功能时为空。
+`rerank_score` 只在词法策略或词法降级时存在，它不是概率，也不能跨问题比较。
 
 系统默认先向 Chroma 请求 `top_k × 3` 个候选，回查 SQLite 后，按
-“同一文档 + 规范化正文”去除完全重复内容，再融合向量分数与词法覆盖率执行轻量 Rerank，
-最后保留 Top-K。这样可以避免重复 Chunk 占满引用，同时不增加额外模型调用。
+“同一文档 + 规范化正文”去除完全重复内容，再让聊天模型对已有 `chunk_id` 排序，最后保留 Top-K。
+模型不得生成新编号；空数组、重复或未知编号会触发词法降级。默认最多向 Reranker 提交 12 个候选。
 
 ## 9. RAG 与 Agent 问答
 
@@ -532,6 +536,16 @@ Router 可能返回四种 `intent`：
     {
       "id": 1,
       "assistant_message_id": 2,
+      "operation": "llm_rerank",
+      "model_name": "your_chat_model",
+      "prompt_tokens": 2500,
+      "completion_tokens": 30,
+      "total_tokens": 2530,
+      "created_at": "2026-08-03T16:19:57"
+    },
+    {
+      "id": 2,
+      "assistant_message_id": 2,
       "operation": "knowledge_qa",
       "model_name": "your_chat_model",
       "prompt_tokens": 950,
@@ -558,7 +572,8 @@ Router 可能返回四种 `intent`：
 ```
 
 实际响应仍包含 `conversation_id`、`assistant_message_id` 和执行步骤。
-资料不足时不会调用聊天模型，因此 `model_usages` 为空。
+资料不足时不会调用回答生成模型；如果已经执行 LLM Rerank，`model_usages` 仍会包含
+`llm_rerank` 的用量。只有召回为空、Rerank 未调用或命中回答缓存时才可能为空。
 
 当用户说“请总结这份文档”但没有提供可匹配文件名时，Router 返回
 `clarification`，不执行检索或 LLM 调用。

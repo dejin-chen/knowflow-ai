@@ -11,7 +11,11 @@ from app.services.chat_completion_service import ChatCompletionResult, ChatCompl
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.rag_answer_cache_service import RagAnswerCacheService
 from app.services.rag_prompt_service import PromptSource, RagPromptService
-from app.services.semantic_search_service import RetrievedChunk, SemanticSearchService
+from app.services.semantic_search_service import (
+    RetrievedChunk,
+    SemanticSearchResult,
+    SemanticSearchService,
+)
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,7 @@ class RagChatResult:
     cache_hit: bool = False
     assistant_message_id: int | None = None
     model_usage: ChatCompletionResult | None = None
+    rerank_model_usage: ChatCompletionResult | None = None
 
 
 class RagChatService:
@@ -99,11 +104,12 @@ class RagChatService:
                 assistant_message_id=assistant_message.id,
             )
 
-        retrieved_chunks = self.semantic_search_service.search(
-            knowledge_base_id=knowledge_base_id,
-            query=question,
-            top_k=actual_top_k,
+        search_result = self._search_with_metadata(
+            knowledge_base_id,
+            question,
+            actual_top_k,
         )
+        retrieved_chunks = search_result.chunks
         # Rerank 会改变顺序，证据阈值仍使用候选中的最小原始向量距离。
         best_distance = (
             min(chunk.distance for chunk in retrieved_chunks)
@@ -158,7 +164,11 @@ class RagChatService:
             retrieved_chunk_count=len(retrieved_chunks),
             best_distance=best_distance,
             insufficient_evidence=insufficient_evidence,
-            source_total_tokens=model_usage.total_tokens if model_usage is not None else 0,
+            source_total_tokens=sum(
+                usage.total_tokens
+                for usage in (search_result.rerank_model_usage, model_usage)
+                if usage is not None
+            ),
         )
 
         return RagChatResult(
@@ -170,6 +180,36 @@ class RagChatService:
             cache_hit=False,
             assistant_message_id=assistant_message.id,
             model_usage=model_usage,
+            rerank_model_usage=search_result.rerank_model_usage,
+        )
+
+    def _search_with_metadata(
+        self,
+        knowledge_base_id: int,
+        question: str,
+        top_k: int,
+    ) -> SemanticSearchResult:
+        """兼容只实现 search 的测试替身，同时保留生产检索的 Rerank 用量。"""
+        search_with_metadata = getattr(
+            self.semantic_search_service,
+            "search_with_metadata",
+            None,
+        )
+        if search_with_metadata is not None:
+            return search_with_metadata(knowledge_base_id, question, top_k)
+
+        chunks = self.semantic_search_service.search(
+            knowledge_base_id=knowledge_base_id,
+            query=question,
+            top_k=top_k,
+        )
+        return SemanticSearchResult(
+            chunks=chunks,
+            rerank_model_usage=None,
+            rerank_method="unknown",
+            rerank_fallback_used=False,
+            rerank_fallback_reason=None,
+            rerank_latency_ms=0.0,
         )
 
     def _get_or_create_conversation(

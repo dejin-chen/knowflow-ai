@@ -21,7 +21,13 @@ class ChatCompletionResult:
 class ChatCompletionService:
     """调用 OpenAI 兼容聊天模型，并保留可观测性所需的用量数据。"""
 
-    def generate_completion(self, prompt: RagPrompt) -> ChatCompletionResult:
+    def generate_completion(
+        self,
+        prompt: RagPrompt,
+        *,
+        model_name: str | None = None,
+        temperature: float = 0.1,
+    ) -> ChatCompletionResult:
         if not settings.chat_api_key:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -36,8 +42,8 @@ class ChatCompletionService:
         )
         try:
             response = client.chat.completions.create(
-                model=settings.chat_model,
-                temperature=0.1,
+                model=model_name or settings.chat_model,
+                temperature=temperature,
                 messages=[
                     {"role": "system", "content": prompt.system_message},
                     {"role": "user", "content": prompt.user_message},
@@ -64,7 +70,7 @@ class ChatCompletionService:
         usage = response.usage
         return ChatCompletionResult(
             answer=answer.strip(),
-            model_name=response.model or settings.chat_model,
+            model_name=response.model or model_name or settings.chat_model,
             prompt_tokens=getattr(usage, "prompt_tokens", 0) or 0,
             completion_tokens=getattr(usage, "completion_tokens", 0) or 0,
             total_tokens=getattr(usage, "total_tokens", 0) or 0,

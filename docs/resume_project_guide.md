@@ -19,10 +19,10 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
    4 类工具之间路由，并持久化 Agent 执行步骤、检索日志和模型 Token 用量。
 3. 实现 RAG 索引生命周期治理，在文档重处理和知识库删除场景下联动清理 SQLite、
    Chroma 与原始文件；使用事务、失败补偿和派生数据失效机制降低悬空向量与过期引用风险。
-4. 建立带 TTL、配置签名、索引变更失效和两级 LRU 容量治理的高频回答缓存，命中时跳过
-   Embedding 与 Chat LLM；在扩大召回候选上实现无额外模型调用的轻量词法 Reranker，30 题
-   开发集 HitRate@3 从 80.00% 提升至 96.67%，MRR 从 0.6167 提升至 0.9000。
-5. 使用 pytest 建立 50 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
+4. 建立带 TTL、配置签名、索引变更失效和两级 LRU 容量治理的高频回答缓存；实现带 chunk_id
+   白名单和词法降级的结构化 LLM Reranker，在 100 题独立测试集上将 HitRate@3 从 82% 提升至
+   94%、MRR 从 0.56 提升至 0.94，并量化 Token、平均/P95 延迟与降级率。
+5. 使用 pytest 建立 57 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
    配置 GitHub Actions 在主分支推送和 Pull Request 时自动执行后端测试与前端检查。
 
 ### 精简版本
@@ -32,7 +32,7 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 > 基于 FastAPI、Streamlit、SQLite 与 Chroma 开发企业知识库 RAG 平台，
 > 实现文档切分、向量检索、带引用问答和 4 类意图 Agent Router；设计跨 SQLite、
 > Chroma 和文件存储的索引生命周期与失败补偿机制，增加高频回答缓存、可量化检索评估与
-> 请求可观测性，并使用 50 个 pytest 测试、
+> 请求可观测性，并使用 57 个 pytest 测试、
 > Docker Compose 和 GitHub Actions 保障交付质量。
 
 ## 3. 不要写进简历的表述
@@ -65,7 +65,8 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 ### 第三部分：问答链路
 
 > 用户提问后，问题先生成向量，Chroma 在指定知识库内扩大召回候选。后端根据
-> chunk_id 回查 SQLite，去除同一文档的重复正文，再融合向量分数与词法覆盖率执行轻量 Rerank，
+> chunk_id 回查 SQLite，去除同一文档的重复正文，再由 LLM 对已有候选编号执行 Rerank，
+> 非法输出或模型故障时自动降级为本地词法排序，
 > 最后构造带编号来源的 Prompt。
 > 如果最佳距离超过阈值，就直接返回知识库依据不足，不调用聊天模型。
 
@@ -83,10 +84,10 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第六部分：工程保障
 
-> 项目现在有 21 个 API 操作、14 张业务表和 50 个测试。Docker Compose 负责统一运行环境，
+> 项目现在有 21 个 API 操作、14 张业务表和 57 个测试。Docker Compose 负责统一运行环境，
 > GitHub Actions 在每次推送后自动运行测试。我还增加了请求 ID、就绪检查、模型超时和
 > 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户、BM25 混合召回和
-> Cross-Encoder Rerank。
+> BM25 + RRF 混合召回和 Cross-Encoder 本地 Rerank。
 
 ## 5. 高频面试问题
 
@@ -149,7 +150,8 @@ Docker 统一应用运行环境和启动方式；GitHub Actions 在代码推送�
 
 ### 12. 下一步会怎么优化？
 
-先把 30 题开发集扩充成独立的 100 题测试集，再验证 BM25 混合召回和 Cross-Encoder Rerank；
+先增加 BM25 + RRF 混合召回，提高当前 95% 的候选命中上限，再比较 LLM 与 Cross-Encoder 的
+质量、Token、部署成本和延迟；
 再将数据层升级 PostgreSQL + pgvector，把文档处理迁移到后台任务队列，并增加登录与权限。
 
 ### 13. Hit Rate@K 和 MRR 有什么区别？
@@ -197,8 +199,8 @@ TTL 只解决过期，不解决短时间高基数问题，所以系统还限制�
 - 21 个 FastAPI API 操作
 - 14 张 SQLAlchemy 业务表
 - 4 类 Agent 意图
-- 50 个 pytest 测试
-- 30 题轻量 Rerank 开发评估集
+- 57 个 pytest 测试
+- 30 题词法 Rerank 开发集 + 100 题 LLM Rerank 独立测试集
 - 2 个 Docker Compose 服务
 - 3 类持久化位置：SQLite、Chroma、uploads
 - 3 个检索评估指标：Hit Rate@K、MRR、关键词召回率

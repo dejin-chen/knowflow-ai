@@ -40,13 +40,21 @@ class LightweightRerankService:
                 (
                     rerank_score,
                     original_rank,
-                    replace(chunk, rerank_score=round(rerank_score, 6)),
+                    replace(
+                        chunk,
+                        rerank_score=round(rerank_score, 6),
+                        rerank_rank=0,
+                        rerank_method="lexical",
+                    ),
                 )
             )
 
         # 分数相同时保持原始向量排序，避免无词法信号时发生无意义抖动。
         scored_chunks.sort(key=lambda item: (-item[0], item[1]))
-        return [item[2] for item in scored_chunks]
+        return [
+            replace(item[2], rerank_rank=rank)
+            for rank, item in enumerate(scored_chunks, start=1)
+        ]
 
     @classmethod
     def _extract_features(cls, text: str) -> set[str]:

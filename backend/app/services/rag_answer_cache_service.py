@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.repositories.rag_answer_cache_repository import RagAnswerCacheRepository
+from app.services.llm_rerank_service import LlmRerankService
 from app.services.rag_prompt_service import RagPromptService
 
 
@@ -157,6 +158,13 @@ class RagAnswerCacheService:
             "distance_threshold": settings.retrieval_distance_threshold,
             "candidate_multiplier": settings.retrieval_candidate_multiplier,
             "rerank_enabled": settings.retrieval_rerank_enabled,
+            "rerank_strategy": settings.retrieval_rerank_strategy,
+            "rerank_model": settings.retrieval_rerank_model or settings.chat_model,
+            "rerank_max_candidates": settings.retrieval_rerank_max_candidates,
+            "rerank_max_chunk_characters": (
+                settings.retrieval_rerank_max_chunk_characters
+            ),
+            "rerank_prompt_version": LlmRerankService.prompt_version,
             "rerank_lexical_weight": settings.retrieval_rerank_lexical_weight,
             "prompt_hash": prompt_hash,
         }

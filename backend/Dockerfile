@@ -10,6 +10,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app ./app
+COPY scripts ./scripts
 
 # SQLite、上传文件和 Chroma 数据都写入 /app/data，运行时由 Compose 挂载持久卷。
 RUN mkdir -p /app/data/uploads /app/data/chroma_db

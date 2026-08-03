@@ -53,6 +53,14 @@ class RetrievalEvaluationService:
             query=case.question,
             top_k=case.top_k,
         )
+        return self.evaluate_chunks(case, retrieved_chunks)
+
+    def evaluate_chunks(
+        self,
+        case: RetrievalEvaluationCase,
+        retrieved_chunks: list[RetrievedChunk],
+    ) -> RetrievalEvaluationCaseResult:
+        """评估一组已固定的候选，供同候选排序对比复用。"""
         first_relevant_rank = self._first_relevant_rank(case, retrieved_chunks)
         keyword_recall = self._keyword_recall(case, retrieved_chunks)
 

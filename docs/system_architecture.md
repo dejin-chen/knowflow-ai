@@ -157,7 +157,11 @@ sequenceDiagram
     C-->>S: chunk_id + distance + metadata
     S->>DB: 回查 Chunk 正文和文档名
     DB-->>S: 按 Chroma 排序返回来源
-    S->>S: 去重并执行轻量词法 Rerank
+    S->>L: 对去重后的候选执行结构化 LLM Rerank
+    L-->>S: 已有 chunk_id 的相关性顺序 + Token 用量
+    opt 模型失败或输出非法
+        S->>S: 降级为本地词法排序
+    end
     S-->>A: RetrievedChunk 列表
     A->>A: 判断检索依据是否充足
     A->>P: 构造带编号参考资料的 Prompt
@@ -322,7 +326,8 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 - 模型客户端设置请求超时和有限重试，连接或超时错误转换为 `503`。
 - 离线评估集用预期文件名和关键事实词标注，不依赖会随重切分变化的 Chunk ID。
 - 评估输出 Hit Rate@K、MRR 和关键词召回率，用于比较 Chunk、Top-K、Embedding 或 Rerank 调整前后的效果。
-- 30 题开发集上，轻量词法 Rerank 将 HitRate@3 从 0.8000 提升至 0.9667、MRR 从 0.6167 提升至 0.9000。
+- 100 题独立测试集上，LLM Rerank 将 HitRate@3 从 0.82 提升至 0.94、MRR 从 0.56 提升至 0.94。
+- LLM Rerank 平均增加约 2634 Token 和 3221 ms 延迟，P95 为 5713 ms；100 次中 1 次非法输出触发词法降级。
 - 回答缓存记录有效条目、累计命中和基于首次模型用量估算的节省 Token。
 
 ## 12. 高频回答缓存
@@ -363,7 +368,7 @@ FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue�
 
 - PDF 仅支持带文本层的文件，尚未实现 OCR 和结构化表格解析。
 - 未实现登录、多租户和细粒度知识库权限。
-- 已有轻量词法 Rerank 和 30 题开发评估，尚未实现 BM25 混合召回、Cross-Encoder Rerank 和独立大规模测试集。
+- 已有结构化 LLM Rerank、词法降级和 100 题独立评估；尚未实现 BM25 + RRF 混合召回和 Cross-Encoder 本地重排。
 - SQLite + Chroma 适合本地演示，不代表高并发生产部署方案。
 - Router 是单次决策，不包含完整 ReAct 循环和自主反思。
 - 回答缓存是带 TTL 和两级 LRU 容量限制的精确匹配，不是可能误复用答案的语义缓存；

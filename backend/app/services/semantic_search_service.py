@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from sqlalchemy.orm import Session
 
@@ -6,7 +6,9 @@ from app.core.config import settings
 from app.repositories.document_chunk_repository import DocumentChunkRepository
 from app.services.embedding_service import EmbeddingService
 from app.services.knowledge_base_service import KnowledgeBaseService
+from app.services.llm_rerank_service import LlmRerankService, RerankExecutionResult
 from app.services.lightweight_rerank_service import LightweightRerankService
+from app.services.chat_completion_service import ChatCompletionResult
 from app.services.vector_store_service import ChromaVectorStoreService, VectorSearchMatch
 
 
@@ -20,6 +22,19 @@ class RetrievedChunk:
     content: str
     distance: float
     rerank_score: float | None = None
+    vector_rank: int | None = None
+    rerank_rank: int | None = None
+    rerank_method: str | None = None
+
+
+@dataclass(frozen=True)
+class SemanticSearchResult:
+    chunks: list[RetrievedChunk]
+    rerank_model_usage: ChatCompletionResult | None
+    rerank_method: str
+    rerank_fallback_used: bool
+    rerank_fallback_reason: str | None
+    rerank_latency_ms: float
 
 
 class SemanticSearchService:
@@ -30,13 +45,14 @@ class SemanticSearchService:
         db: Session,
         embedding_service: EmbeddingService | None = None,
         vector_store: ChromaVectorStoreService | None = None,
-        rerank_service: LightweightRerankService | None = None,
+        rerank_service=None,
     ) -> None:
         self.knowledge_base_service = KnowledgeBaseService(db)
         self.chunk_repository = DocumentChunkRepository(db)
         self.embedding_service = embedding_service or EmbeddingService()
         self.vector_store = vector_store or ChromaVectorStoreService()
-        self.rerank_service = rerank_service or LightweightRerankService()
+        self.rerank_service = rerank_service or LlmRerankService()
+        self.lexical_rerank_service = LightweightRerankService()
 
     def search(
         self,
@@ -44,9 +60,60 @@ class SemanticSearchService:
         query: str,
         top_k: int,
     ) -> list[RetrievedChunk]:
+        return self.search_with_metadata(knowledge_base_id, query, top_k).chunks
+
+    def search_with_metadata(
+        self,
+        knowledge_base_id: int,
+        query: str,
+        top_k: int,
+    ) -> SemanticSearchResult:
+        candidates = self.retrieve_candidates(knowledge_base_id, query, top_k)
+        execution = self._rerank(query, candidates)
+        return SemanticSearchResult(
+            chunks=execution.chunks[:top_k],
+            rerank_model_usage=execution.model_usage,
+            rerank_method=execution.method,
+            rerank_fallback_used=execution.fallback_used,
+            rerank_fallback_reason=execution.fallback_reason,
+            rerank_latency_ms=execution.latency_ms,
+        )
+
+    def retrieve_candidates(
+        self,
+        knowledge_base_id: int,
+        query: str,
+        top_k: int,
+    ) -> list[RetrievedChunk]:
         self.knowledge_base_service.get_required_knowledge_base(knowledge_base_id)
         query_embedding = self.embedding_service.embed_texts([query])[0]
-        candidate_top_k = top_k * settings.retrieval_candidate_multiplier
+        return self.retrieve_candidates_by_embedding(
+            knowledge_base_id,
+            query_embedding,
+            top_k,
+            validate_knowledge_base=False,
+        )
+
+    def retrieve_candidates_by_embedding(
+        self,
+        knowledge_base_id: int,
+        query_embedding: list[float],
+        top_k: int,
+        *,
+        validate_knowledge_base: bool = True,
+    ) -> list[RetrievedChunk]:
+        """复用预先生成的问题向量，主要用于批量离线评测。"""
+        if validate_knowledge_base:
+            self.knowledge_base_service.get_required_knowledge_base(
+                knowledge_base_id
+            )
+        candidate_top_k = max(
+            top_k,
+            min(
+                top_k * settings.retrieval_candidate_multiplier,
+                settings.retrieval_rerank_max_candidates,
+            ),
+        )
         matches = self.vector_store.search(
             query_embedding=query_embedding,
             knowledge_base_id=knowledge_base_id,
@@ -54,9 +121,43 @@ class SemanticSearchService:
         )
         results = self._rehydrate_matches(matches, knowledge_base_id)
         candidates = self._deduplicate(results)
-        if settings.retrieval_rerank_enabled:
-            candidates = self.rerank_service.rerank(query, candidates)
-        return candidates[:top_k]
+        return [
+            replace(chunk, vector_rank=rank)
+            for rank, chunk in enumerate(candidates, start=1)
+        ]
+
+    def _rerank(
+        self,
+        query: str,
+        candidates: list[RetrievedChunk],
+    ) -> RerankExecutionResult:
+        if not settings.retrieval_rerank_enabled:
+            return RerankExecutionResult(
+                chunks=candidates,
+                model_usage=None,
+                method="vector",
+                fallback_used=False,
+                fallback_reason=None,
+                latency_ms=0.0,
+            )
+
+        service = (
+            self.lexical_rerank_service
+            if settings.retrieval_rerank_strategy == "lexical"
+            else self.rerank_service
+        )
+        if hasattr(service, "rerank_with_metadata"):
+            return service.rerank_with_metadata(query, candidates)
+
+        reranked_chunks = service.rerank(query, candidates)
+        return RerankExecutionResult(
+            chunks=reranked_chunks,
+            model_usage=None,
+            method=settings.retrieval_rerank_strategy,
+            fallback_used=False,
+            fallback_reason=None,
+            latency_ms=0.0,
+        )
 
     @staticmethod
     def _deduplicate(chunks: list[RetrievedChunk]) -> list[RetrievedChunk]:

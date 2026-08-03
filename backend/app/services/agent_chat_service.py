@@ -82,8 +82,15 @@ class AgentChatService:
             )
             model_usages = self._record_model_usage(
                 rag_result.assistant_message_id,
-                AgentIntent.KNOWLEDGE_QA,
-                rag_result.model_usage,
+                "llm_rerank",
+                rag_result.rerank_model_usage,
+            )
+            model_usages.extend(
+                self._record_model_usage(
+                    rag_result.assistant_message_id,
+                    AgentIntent.KNOWLEDGE_QA.value,
+                    rag_result.model_usage,
+                )
             )
             result = self._build_knowledge_qa_result(
                 rag_result,
@@ -205,7 +212,7 @@ class AgentChatService:
         )
         model_usages = self._record_model_usage(
             assistant_message.id,
-            intent,
+            intent.value,
             tool_result.model_usage,
         )
         result = AgentChatResult(
@@ -272,7 +279,7 @@ class AgentChatService:
     def _record_model_usage(
         self,
         assistant_message_id: int | None,
-        intent: AgentIntent,
+        operation: str,
         completion: ChatCompletionResult | None,
     ) -> list[dict]:
         """仅在真实模型调用后记录用量，避免把规则分支误计为模型成本。"""
@@ -280,7 +287,7 @@ class AgentChatService:
             return []
         usage_log = self.model_usage_repository.create(
             assistant_message_id=assistant_message_id,
-            operation=intent.value,
+            operation=operation,
             model_name=completion.model_name,
             prompt_tokens=completion.prompt_tokens,
             completion_tokens=completion.completion_tokens,

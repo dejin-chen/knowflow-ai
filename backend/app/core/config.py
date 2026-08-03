@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -61,13 +62,17 @@ class Settings(BaseSettings):
 
     chroma_persist_dir: str = "./chroma_db"
     chroma_collection_name: str = "knowflow_chunks"
-    embedding_batch_size: int = 32
+    embedding_batch_size: int = Field(default=25, ge=1, le=100)
     model_request_timeout_seconds: float = Field(default=30.0, ge=5.0, le=120.0)
     model_max_retries: int = Field(default=1, ge=0, le=5)
     retrieval_top_k: int = 3
     retrieval_candidate_multiplier: int = Field(default=3, ge=1, le=10)
     retrieval_distance_threshold: float = 0.6
     retrieval_rerank_enabled: bool = True
+    retrieval_rerank_strategy: Literal["llm", "lexical"] = "llm"
+    retrieval_rerank_model: str | None = None
+    retrieval_rerank_max_candidates: int = Field(default=12, ge=1, le=50)
+    retrieval_rerank_max_chunk_characters: int = Field(default=800, ge=100, le=5000)
     retrieval_rerank_lexical_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     rag_answer_cache_enabled: bool = True
     rag_answer_cache_ttl_seconds: int = Field(default=3600, ge=60, le=604800)

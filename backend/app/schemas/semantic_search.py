@@ -27,3 +27,6 @@ class RetrievedChunkRead(BaseModel):
     content: str
     distance: float
     rerank_score: float | None = None
+    vector_rank: int | None = None
+    rerank_rank: int | None = None
+    rerank_method: str | None = None

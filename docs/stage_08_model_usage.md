@@ -8,7 +8,7 @@
 
 `model_usage_logs` 关联 `assistant_message_id`，并记录：
 
-- `operation`：调用场景，例如 `knowledge_qa`、`document_summary`
+- `operation`：调用场景，例如 `llm_rerank`、`knowledge_qa`、`document_summary`
 - `model_name`：实际模型名称
 - `prompt_tokens`：输入 Token
 - `completion_tokens`：输出 Token
@@ -18,4 +18,5 @@
 
 ## 边界
 
-只有真实调用 LLM 时才创建记录。资料不足直接返回固定答案、Router 规则判断、追问用户等路径不消耗聊天模型 Token，因此不会产生用量日志。
+只有真实调用 LLM 时才创建记录。一次普通问答可能先产生 `llm_rerank`，再产生 `knowledge_qa`；
+资料不足时不调用回答模型，但已经发生的 Rerank 用量仍会记录。Router 规则判断和追问用户不产生模型用量。
