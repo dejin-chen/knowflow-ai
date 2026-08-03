@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import replace
-import re
 from typing import TYPE_CHECKING
 
 from app.core.config import settings
+from app.services.retrieval_tokenizer import RetrievalTokenizer
 
 
 if TYPE_CHECKING:
@@ -13,8 +13,6 @@ if TYPE_CHECKING:
 
 class LightweightRerankService:
     """使用轻量词法覆盖率重新排列向量召回候选，不产生额外模型调用。"""
-
-    token_pattern = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]+", re.IGNORECASE)
 
     def rerank(
         self,
@@ -30,7 +28,11 @@ class LightweightRerankService:
                 self._extract_features(chunk.content),
             )
             # cosine distance 越小越好，先转换成 0~1 的语义分数再与词法分数融合。
-            semantic_score = min(max(1.0 - chunk.distance, 0.0), 1.0)
+            semantic_score = (
+                min(max(1.0 - chunk.distance, 0.0), 1.0)
+                if chunk.distance is not None
+                else 0.0
+            )
             lexical_weight = settings.retrieval_rerank_lexical_weight
             rerank_score = (
                 (1.0 - lexical_weight) * semantic_score
@@ -58,19 +60,7 @@ class LightweightRerankService:
 
     @classmethod
     def _extract_features(cls, text: str) -> set[str]:
-        features: set[str] = set()
-        for token in cls.token_pattern.findall(text.casefold()):
-            if cls._is_chinese(token[0]):
-                if len(token) == 1:
-                    features.add(token)
-                else:
-                    features.update(
-                        token[index : index + 2]
-                        for index in range(len(token) - 1)
-                    )
-            else:
-                features.add(token)
-        return features
+        return set(RetrievalTokenizer.tokenize(text))
 
     @staticmethod
     def _lexical_recall(
@@ -80,7 +70,3 @@ class LightweightRerankService:
         if not query_features:
             return 0.0
         return len(query_features & content_features) / len(query_features)
-
-    @staticmethod
-    def _is_chinese(character: str) -> bool:
-        return "\u4e00" <= character <= "\u9fff"

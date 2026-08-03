@@ -68,6 +68,13 @@ class Settings(BaseSettings):
     retrieval_top_k: int = 3
     retrieval_candidate_multiplier: int = Field(default=3, ge=1, le=10)
     retrieval_distance_threshold: float = 0.6
+    retrieval_hybrid_enabled: bool = True
+    retrieval_bm25_top_k: int = Field(default=12, ge=1, le=100)
+    retrieval_bm25_min_score: float = Field(default=0.0, ge=0.0)
+    retrieval_bm25_evidence_threshold: float = Field(default=8.0, ge=0.0)
+    retrieval_rrf_k: int = Field(default=60, ge=1, le=1000)
+    retrieval_rrf_vector_weight: float = Field(default=1.0, gt=0.0, le=10.0)
+    retrieval_rrf_bm25_weight: float = Field(default=1.5, gt=0.0, le=10.0)
     retrieval_rerank_enabled: bool = True
     retrieval_rerank_strategy: Literal["llm", "lexical"] = "llm"
     retrieval_rerank_model: str | None = None

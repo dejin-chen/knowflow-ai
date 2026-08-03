@@ -6,7 +6,7 @@
 **项目地址：** <https://github.com/xibeiqiaozhilang-bot/knowflow-ai>  
 **目标岗位：** Agent 工程师 / AI 应用开发工程师  
 **技术栈：** Python、FastAPI、Streamlit、SQLAlchemy、SQLite、Chroma、
-OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
+OpenAI 兼容 API、rank-bm25、pytest、Docker Compose、GitHub Actions
 
 ## 2. 简历项目描述
 
@@ -19,10 +19,10 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
    4 类工具之间路由，并持久化 Agent 执行步骤、检索日志和模型 Token 用量。
 3. 实现 RAG 索引生命周期治理，在文档重处理和知识库删除场景下联动清理 SQLite、
    Chroma 与原始文件；使用事务、失败补偿和派生数据失效机制降低悬空向量与过期引用风险。
-4. 建立带 TTL、配置签名、索引变更失效和两级 LRU 容量治理的高频回答缓存；实现带 chunk_id
-   白名单和词法降级的结构化 LLM Reranker，在 100 题独立测试集上将 HitRate@3 从 82% 提升至
-   94%、MRR 从 0.56 提升至 0.94，并量化 Token、平均/P95 延迟与降级率。
-5. 使用 pytest 建立 57 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
+4. 实现 Chroma 与 BM25 双路召回，通过加权 RRF 融合排名并接入带 chunk_id 白名单和词法降级的
+   结构化 LLM Reranker；在 100 题独立测试集上将候选命中率从 95% 提升至 100%，HitRate@3
+   从纯向量的 82% 提升至 100%、MRR 从 0.56 提升至 1.00，并量化 Token 与平均/P95 延迟。
+5. 使用 pytest 建立 63 个自动化测试，并通过 Docker Compose 统一前后端运行环境，
    配置 GitHub Actions 在主分支推送和 Pull Request 时自动执行后端测试与前端检查。
 
 ### 精简版本
@@ -31,8 +31,8 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 > 基于 FastAPI、Streamlit、SQLite 与 Chroma 开发企业知识库 RAG 平台，
 > 实现文档切分、向量检索、带引用问答和 4 类意图 Agent Router；设计跨 SQLite、
-> Chroma 和文件存储的索引生命周期与失败补偿机制，增加高频回答缓存、可量化检索评估与
-> 请求可观测性，并使用 57 个 pytest 测试、
+> Chroma 和文件存储的索引生命周期与失败补偿机制，增加 BM25 + RRF 混合召回、高频回答缓存与
+> 可量化检索评估，并使用 63 个 pytest 测试、
 > Docker Compose 和 GitHub Actions 保障交付质量。
 
 ## 3. 不要写进简历的表述
@@ -64,8 +64,9 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第三部分：问答链路
 
-> 用户提问后，问题先生成向量，Chroma 在指定知识库内扩大召回候选。后端根据
-> chunk_id 回查 SQLite，去除同一文档的重复正文，再由 LLM 对已有候选编号执行 Rerank，
+> 用户提问后，Chroma 生成语义候选，BM25 从 SQLite Chunk 中生成关键词候选，两路结果通过
+> 加权 RRF 按名次融合。后端根据 chunk_id 回查 SQLite，去除同一文档的重复正文，再由 LLM
+> 对已有候选编号执行 Rerank，
 > 非法输出或模型故障时自动降级为本地词法排序，
 > 最后构造带编号来源的 Prompt。
 > 如果最佳距离超过阈值，就直接返回知识库依据不足，不调用聊天模型。
@@ -84,10 +85,10 @@ OpenAI 兼容 API、pytest、Docker Compose、GitHub Actions
 
 ### 第六部分：工程保障
 
-> 项目现在有 21 个 API 操作、14 张业务表和 57 个测试。Docker Compose 负责统一运行环境，
+> 项目现在有 21 个 API 操作、14 张业务表和 63 个测试。Docker Compose 负责统一运行环境，
 > GitHub Actions 在每次推送后自动运行测试。我还增加了请求 ID、就绪检查、模型超时和
-> 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户、BM25 混合召回和
-> BM25 + RRF 混合召回和 Cross-Encoder 本地 Rerank。
+> 离线检索评估。当前边界是扫描 PDF 不支持 OCR，也没有登录、多租户和 Cross-Encoder 本地 Rerank；
+> 当前 BM25 为 SQLite 动态语料实现，不适合直接宣称海量文档能力。
 
 ## 5. 高频面试问题
 
@@ -150,8 +151,9 @@ Docker 统一应用运行环境和启动方式；GitHub Actions 在代码推送�
 
 ### 12. 下一步会怎么优化？
 
-先增加 BM25 + RRF 混合召回，提高当前 95% 的候选命中上限，再比较 LLM 与 Cross-Encoder 的
-质量、Token、部署成本和延迟；
+当前已经完成 BM25 + RRF，将 100 题候选命中率从 95% 提升至 100%。下一步会比较 LLM 与
+Cross-Encoder 的质量、Token、部署成本和延迟，并在数据量增长时将动态 BM25 替换为
+PostgreSQL 全文检索或 OpenSearch；
 再将数据层升级 PostgreSQL + pgvector，把文档处理迁移到后台任务队列，并增加登录与权限。
 
 ### 13. Hit Rate@K 和 MRR 有什么区别？
@@ -178,6 +180,13 @@ MRR 使用第一个正确证据排名的倒数，正确结果越靠前得分越�
 TTL 只解决过期，不解决短时间高基数问题，所以系统还限制单知识库 500 条和全局 2000 条；超限时
 按照最后命中时间或最近写入时间执行 LRU 批量淘汰。多实例高并发时再迁移 Redis。
 
+### 17. 为什么 RRF 不直接相加向量和 BM25 的原始分数？
+
+Chroma distance 越小越好，BM25 score 越大越好，两者量纲和范围都不同。直接相加需要额外归一化，
+并且容易受不同知识库分数分布影响。RRF 只使用各自名次，一个 Chunk 同时被两路排在前面时得分更高，
+只被一路召回时也不会丢失。项目在 30 题开发集上固定向量权重 1.0、BM25 权重 1.5，再用未参与
+调参的 100 题测试集验证。
+
 ## 6. 面试演示顺序
 
 建议演示 5 到 8 分钟：
@@ -199,8 +208,10 @@ TTL 只解决过期，不解决短时间高基数问题，所以系统还限制�
 - 21 个 FastAPI API 操作
 - 14 张 SQLAlchemy 业务表
 - 4 类 Agent 意图
-- 57 个 pytest 测试
-- 30 题词法 Rerank 开发集 + 100 题 LLM Rerank 独立测试集
+- 63 个 pytest 测试
+- 30 题检索开发集 + 100 题混合召回与 LLM Rerank 独立测试集
 - 2 个 Docker Compose 服务
 - 3 类持久化位置：SQLite、Chroma、uploads
 - 3 个检索评估指标：Hit Rate@K、MRR、关键词召回率
+- 100 题候选命中率：纯向量 95%，混合召回 100%
+- 100 题 HitRate@3：纯向量 82%，混合 RRF 93%，混合 RRF + LLM Rerank 100%

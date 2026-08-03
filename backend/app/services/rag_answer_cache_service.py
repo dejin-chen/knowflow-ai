@@ -157,6 +157,15 @@ class RagAnswerCacheService:
             "embedding_model": settings.embedding_model,
             "distance_threshold": settings.retrieval_distance_threshold,
             "candidate_multiplier": settings.retrieval_candidate_multiplier,
+            "hybrid_enabled": settings.retrieval_hybrid_enabled,
+            "bm25_top_k": settings.retrieval_bm25_top_k,
+            "bm25_min_score": settings.retrieval_bm25_min_score,
+            "bm25_evidence_threshold": (
+                settings.retrieval_bm25_evidence_threshold
+            ),
+            "rrf_k": settings.retrieval_rrf_k,
+            "rrf_vector_weight": settings.retrieval_rrf_vector_weight,
+            "rrf_bm25_weight": settings.retrieval_rrf_bm25_weight,
             "rerank_enabled": settings.retrieval_rerank_enabled,
             "rerank_strategy": settings.retrieval_rerank_strategy,
             "rerank_model": settings.retrieval_rerank_model or settings.chat_model,

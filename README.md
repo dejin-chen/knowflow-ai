@@ -16,7 +16,7 @@ Embedding 和语义检索，到带引用问答、轻量 Agent Router、执行记
 - 上传文件分块写盘、10 MB 默认限制和异常残留文件清理
 - 文本清洗、可配置 Chunk 切分和位置记录
 - OpenAI 兼容 Embedding 接口与 Chroma 向量索引
-- 候选扩大召回、重复正文去重与结构化 LLM Rerank，失败时自动降级为词法排序
+- Chroma + BM25 双路召回、加权 RRF 融合与结构化 LLM Rerank，失败时自动降级为词法排序
 - 文档重处理时同步清理旧向量，并使旧摘要和 FAQ 失效
 - 删除知识库时级联清理 SQLite、Chroma 与上传文件
 - 带引用来源、资料不足判断和会话历史的 RAG 问答
@@ -43,6 +43,8 @@ flowchart LR
     AR --> RAG["RAG 问答"]
     AR --> DT["总结 / 对比 / 追问工具"]
     RAG --> EMB["Embedding API"]
+    RAG --> BM25["SQLite Chunk / BM25"]
+    RAG --> RRF["加权 RRF 融合"]
     RAG --> RR["LLM Rerank"]
     RAG --> LLM["Chat LLM API"]
     RAG --> CACHE[("SQLite 回答缓存")]
@@ -53,7 +55,7 @@ flowchart LR
 
 三类存储各自负责不同数据：
 
-- SQLite 保存知识库、文档、Chunk 正文、回答缓存、会话、日志和引用关系，是业务数据来源。
+- SQLite 保存知识库、文档、Chunk 正文、回答缓存、会话、日志和引用关系，也是当前 BM25 语料来源。
 - Chroma 保存 Chunk 向量、检索 metadata 和索引副本，负责语义相似度召回。
 - 文件目录保存用户上传的原始文档，数据库只记录其存储路径和元信息。
 
@@ -81,10 +83,10 @@ flowchart LR
 → 生成包含知识库、问题、Top-K、模型与 Prompt 版本的缓存键
 → 命中有效缓存时直接复用回答和证据，跳过 Embedding、LLM Rerank 与回答模型
 → 未命中时进入正常 RAG 流程
-→ 问题向量化
-→ Chroma 在指定知识库内扩大召回候选
-→ 根据 metadata 回查 SQLite 中的 Chunk 和文档来源
-→ 去除同一文档中的重复正文
+→ 问题向量化并由 Chroma 生成语义候选
+→ 从 SQLite 读取当前知识库 Chunk 并由 BM25 生成关键词候选
+→ 使用加权 RRF 按两路名次融合候选
+→ 根据 chunk_id 批量回查 SQLite 中的 Chunk 和文档来源并去重
 → LLM 仅返回已有 chunk_id 的相关性顺序，非法输出时降级为词法排序
 → 截取最终 Top-K
 → 判断检索依据是否充足
@@ -102,6 +104,7 @@ flowchart LR
 | ORM | SQLAlchemy | 映射 Python 模型与关系型数据库表 |
 | 业务数据库 | SQLite | 保存结构化业务数据和 Chunk 正文 |
 | 向量数据库 | Chroma | 保存 Embedding 并执行语义检索 |
+| 关键词检索 | rank-bm25 | 对 SQLite Chunk 执行 BM25 词法召回 |
 | 文档解析 | pypdf | 提取文本型 PDF，并保留页码标记 |
 | 模型接口 | OpenAI 兼容 API | 提供 Chat Completion 和 Embedding |
 | 配置 | pydantic-settings + `.env` | 隔离环境配置和真实密钥 |
@@ -220,8 +223,8 @@ cd backend
 .\.venv\Scripts\python.exe -m pytest
 ```
 
-项目现有 57 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
-RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
+项目现有 63 个测试，覆盖健康检查、知识库与文档、Chunk、向量索引、
+BM25 + RRF 混合召回、RAG 问答、Agent Router、执行历史、反馈、摘要、FAQ、模型用量和
 多存储一致性。生命周期测试会验证旧向量清理、数据库失败补偿、
 派生数据失效、SQLite 外键和内部路径隐藏；可靠性测试还覆盖流式上传、
 PDF 解析、请求追踪、模型超时、检索评估指标和回答缓存生命周期。
@@ -237,14 +240,15 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - SQLite 内部变更使用事务；Chroma 写入后若数据库失败，则执行补偿删除。
 - 文档重切分会使向量、摘要和 FAQ 一起失效，避免使用旧 Chunk 派生结果。
 - 检索先扩大候选集再去重，避免重复正文占满最终 Top-K。
-- RAG 在最佳检索距离超过阈值时直接返回“知识库中没有足够依据”，减少无依据回答。
+- RAG 在向量距离和高置信 BM25 证据都不足时返回“知识库中没有足够依据”；低分 BM25 候选不能单独绕过拒答。
 - 默认语义检索会调用 Embedding 与 LLM Rerank；摘要、FAQ、多文档对比和问答生成也会按流程调用 LLM。
 - 评估集使用文件名和关键事实词标注，不绑定会随重切分变化的 Chunk ID。
 - 存活检查只表示进程可响应；就绪检查还验证 SQLite 和 Chroma 可访问。
 - 回答缓存只匹配规范化后完全相同的问题；TTL、配置签名和索引变更失效共同防止旧答案复用，
   单知识库与全局容量上限通过 LRU 批量淘汰避免缓存表无限增长。
-- LLM Rerank 只能重排扩大召回候选，使用 JSON 编号白名单防止伪造 Chunk；接口或解析失败时降级为词法排序。
-- 100 题独立测试集上，LLM Rerank 将 HitRate@3 从 82% 提升至 94%、MRR 从 0.56 提升至 0.94；同时平均增加约 2634 Token 和 3.22 秒排序延迟。
+- BM25 与 Chroma 使用加权 RRF 按名次融合，避免直接相加不同量纲的 distance 和 BM25 score。
+- LLM Rerank 只重排混合召回候选，使用 JSON 编号白名单防止伪造 Chunk；接口或解析失败时降级为词法排序。
+- 100 题独立测试集上，混合召回将候选命中率从 95% 提升至 100%；结合 LLM Rerank 后，HitRate@3 从纯向量的 82% 提升至 100%、MRR 从 0.56 提升至 1.00，平均消耗约 3402 Token、耗时 3.19 秒。
 - 项目暂不加入复杂权限、多租户和多 Agent 编排，优先保证完整性与可讲解性。
 
 ## 中文文档
@@ -256,6 +260,7 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 - [RAG 高频回答缓存](docs/stage_10_rag_answer_cache.md)
 - [轻量词法 Rerank 与对比评估](docs/stage_11_lightweight_rerank.md)
 - [LLM Rerank 与 100 题独立评测](docs/stage_12_llm_rerank.md)
+- [BM25 + RRF 混合召回](docs/stage_13_hybrid_retrieval.md)
 - [简历与面试讲解](docs/resume_project_guide.md)
 - [RAG 问答阶段](docs/stage_05_rag_chat.md)
 - [Streamlit 页面阶段](docs/stage_06_streamlit_ui.md)
@@ -267,6 +272,6 @@ GitHub Actions 会在推送到 `main`、创建 Pull Request 或手动触发时�
 
 - 增加 PostgreSQL + pgvector 迁移方案
 - 补充用户登录与知识库访问控制
-- 增加 BM25 + RRF 混合召回，提高 LLM Rerank 的候选命中上限
+- 比较 Cross-Encoder 本地 Rerank 与当前 LLM Rerank 的质量、延迟和部署成本
 - 将文档处理迁移到后台异步任务队列
 - 为扫描版 PDF 增加 OCR

@@ -177,3 +177,77 @@ def test_rag_chat_uses_minimum_vector_distance_after_rerank() -> None:
         assert db.scalar(select(RetrievalLog)).best_distance == 0.2
     finally:
         db.close()
+
+
+def test_rag_chat_rejects_weak_bm25_only_evidence() -> None:
+    db = build_database()
+    try:
+        knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="弱 BM25 证据测试库")
+        )
+        weak_chunk = RetrievedChunk(
+            chunk_id=1,
+            document_id=1,
+            knowledge_base_id=knowledge_base.id,
+            filename="制度.md",
+            chunk_index=0,
+            content="只与问题包含少量常见词的片段。",
+            distance=None,
+            bm25_rank=1,
+            bm25_score=2.5,
+        )
+        service = RagChatService(
+            db,
+            semantic_search_service=FakeSemanticSearchService([weak_chunk]),
+            chat_completion_service=FailingChatCompletionService(),
+        )
+
+        result = service.ask(
+            knowledge_base_id=knowledge_base.id,
+            question="知识库没有记录的问题？",
+            conversation_id=None,
+            top_k=3,
+        )
+
+        assert result.insufficient_evidence is True
+        assert result.citations == []
+    finally:
+        db.close()
+
+
+def test_rag_chat_accepts_strong_bm25_only_evidence() -> None:
+    db = build_database()
+    try:
+        knowledge_base = KnowledgeBaseService(db).create_knowledge_base(
+            KnowledgeBaseCreate(name="强 BM25 证据测试库")
+        )
+        strong_chunk = RetrievedChunk(
+            chunk_id=2,
+            document_id=1,
+            knowledge_base_id=knowledge_base.id,
+            filename="培训制度.md",
+            chunk_index=0,
+            content="外部培训费用报销前需要完成培训申请。",
+            distance=None,
+            bm25_rank=1,
+            bm25_score=12.0,
+        )
+        fake_chat = FakeChatCompletionService()
+        service = RagChatService(
+            db,
+            semantic_search_service=FakeSemanticSearchService([strong_chunk]),
+            chat_completion_service=fake_chat,
+        )
+
+        result = service.ask(
+            knowledge_base_id=knowledge_base.id,
+            question="外部培训费用报销前需要什么手续？",
+            conversation_id=None,
+            top_k=3,
+        )
+
+        assert result.insufficient_evidence is False
+        assert result.citations[0]["chunk_id"] == 2
+        assert fake_chat.last_prompt is not None
+    finally:
+        db.close()

@@ -4,11 +4,13 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.repositories.document_chunk_repository import DocumentChunkRepository
+from app.services.bm25_retrieval_service import Bm25RetrievalService
+from app.services.chat_completion_service import ChatCompletionResult
 from app.services.embedding_service import EmbeddingService
 from app.services.knowledge_base_service import KnowledgeBaseService
 from app.services.llm_rerank_service import LlmRerankService, RerankExecutionResult
 from app.services.lightweight_rerank_service import LightweightRerankService
-from app.services.chat_completion_service import ChatCompletionResult
+from app.services.rrf_fusion_service import RrfFusionService
 from app.services.vector_store_service import ChromaVectorStoreService, VectorSearchMatch
 
 
@@ -20,9 +22,13 @@ class RetrievedChunk:
     filename: str
     chunk_index: int
     content: str
-    distance: float
+    distance: float | None
     rerank_score: float | None = None
     vector_rank: int | None = None
+    bm25_rank: int | None = None
+    bm25_score: float | None = None
+    fusion_rank: int | None = None
+    fusion_score: float | None = None
     rerank_rank: int | None = None
     rerank_method: str | None = None
 
@@ -38,7 +44,7 @@ class SemanticSearchResult:
 
 
 class SemanticSearchService:
-    """执行“问题向量化 -> Chroma 召回 -> SQLite 来源回查”的语义检索。"""
+    """执行向量/BM25 双路召回、RRF 融合、来源回查和候选重排。"""
 
     def __init__(
         self,
@@ -46,6 +52,8 @@ class SemanticSearchService:
         embedding_service: EmbeddingService | None = None,
         vector_store: ChromaVectorStoreService | None = None,
         rerank_service=None,
+        bm25_service: Bm25RetrievalService | None = None,
+        rrf_service: RrfFusionService | None = None,
     ) -> None:
         self.knowledge_base_service = KnowledgeBaseService(db)
         self.chunk_repository = DocumentChunkRepository(db)
@@ -53,6 +61,8 @@ class SemanticSearchService:
         self.vector_store = vector_store or ChromaVectorStoreService()
         self.rerank_service = rerank_service or LlmRerankService()
         self.lexical_rerank_service = LightweightRerankService()
+        self.bm25_service = bm25_service or Bm25RetrievalService(db)
+        self.rrf_service = rrf_service or RrfFusionService()
 
     def search(
         self,
@@ -87,6 +97,14 @@ class SemanticSearchService:
     ) -> list[RetrievedChunk]:
         self.knowledge_base_service.get_required_knowledge_base(knowledge_base_id)
         query_embedding = self.embedding_service.embed_texts([query])[0]
+        if settings.retrieval_hybrid_enabled:
+            return self.retrieve_hybrid_candidates_by_embedding(
+                knowledge_base_id,
+                query,
+                query_embedding,
+                top_k,
+                validate_knowledge_base=False,
+            )
         return self.retrieve_candidates_by_embedding(
             knowledge_base_id,
             query_embedding,
@@ -125,6 +143,78 @@ class SemanticSearchService:
             replace(chunk, vector_rank=rank)
             for rank, chunk in enumerate(candidates, start=1)
         ]
+
+    def retrieve_hybrid_candidates_by_embedding(
+        self,
+        knowledge_base_id: int,
+        query: str,
+        query_embedding: list[float],
+        top_k: int,
+        *,
+        validate_knowledge_base: bool = True,
+    ) -> list[RetrievedChunk]:
+        """获取向量和 BM25 双路候选，再使用 RRF 生成统一候选顺序。"""
+        if validate_knowledge_base:
+            self.knowledge_base_service.get_required_knowledge_base(
+                knowledge_base_id
+            )
+        vector_candidates = self.retrieve_candidates_by_embedding(
+            knowledge_base_id,
+            query_embedding,
+            top_k,
+            validate_knowledge_base=False,
+        )
+        bm25_matches = self.bm25_service.search(
+            knowledge_base_id,
+            query,
+            settings.retrieval_bm25_top_k,
+        )
+        final_candidate_limit = max(
+            top_k,
+            settings.retrieval_rerank_max_candidates,
+        )
+        fusion_matches = self.rrf_service.fuse(
+            [chunk.chunk_id for chunk in vector_candidates],
+            bm25_matches,
+            limit=final_candidate_limit * 2,
+        )
+        rows = self.chunk_repository.list_with_document_by_ids(
+            [match.chunk_id for match in fusion_matches]
+        )
+        rows_by_chunk_id = {chunk.id: (chunk, document) for chunk, document in rows}
+        vector_chunks_by_id = {
+            chunk.chunk_id: chunk for chunk in vector_candidates
+        }
+
+        hybrid_candidates: list[RetrievedChunk] = []
+        for match in fusion_matches:
+            row = rows_by_chunk_id.get(match.chunk_id)
+            if row is None:
+                continue
+            chunk, document = row
+            if chunk.knowledge_base_id != knowledge_base_id:
+                continue
+            vector_chunk = vector_chunks_by_id.get(match.chunk_id)
+            hybrid_candidates.append(
+                RetrievedChunk(
+                    chunk_id=chunk.id,
+                    document_id=document.id,
+                    knowledge_base_id=chunk.knowledge_base_id,
+                    filename=document.filename,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content,
+                    distance=(
+                        vector_chunk.distance if vector_chunk is not None else None
+                    ),
+                    vector_rank=match.vector_rank,
+                    bm25_rank=match.bm25_rank,
+                    bm25_score=match.bm25_score,
+                    fusion_rank=match.rank,
+                    fusion_score=match.score,
+                )
+            )
+
+        return self._deduplicate(hybrid_candidates)[:final_candidate_limit]
 
     def _rerank(
         self,

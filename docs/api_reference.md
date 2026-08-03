@@ -446,6 +446,10 @@ Token 用量。重复调用会更新已有摘要。
     "distance": 0.2135,
     "rerank_score": null,
     "vector_rank": 2,
+    "bm25_rank": 1,
+    "bm25_score": 3.8241,
+    "fusion_rank": 1,
+    "fusion_score": 0.04019,
     "rerank_rank": 1,
     "rerank_method": "llm"
   }
@@ -454,13 +458,17 @@ Token 用量。重复调用会更新已有摘要。
 
 `distance` 是 Chroma 返回的余弦距离，通常越小表示语义越接近。
 它不是百分制相似度，不应显示成“78.65% 准确率”。
+只被 BM25 找到的候选没有向量距离，因此 `distance` 和 `vector_rank` 可以为 `null`。
 
-`vector_rank` 是 Chroma 召回并去重后的原始顺序，`rerank_rank` 是重排后的顺序。
+`vector_rank` 是 Chroma 候选顺序，`bm25_rank` 和 `bm25_score` 是关键词召回结果，
+`fusion_rank` 和 `fusion_score` 是加权 RRF 的融合结果，`rerank_rank` 是最终重排顺序。
+RRF 只融合两路名次，不直接相加 Chroma distance 与 BM25 score。
 `rerank_method` 正常为 `llm`，模型调用或 JSON 校验失败时为 `lexical_fallback`，关闭功能时为空。
 `rerank_score` 只在词法策略或词法降级时存在，它不是概率，也不能跨问题比较。
 
-系统默认先向 Chroma 请求 `top_k × 3` 个候选，回查 SQLite 后，按
-“同一文档 + 规范化正文”去除完全重复内容，再让聊天模型对已有 `chunk_id` 排序，最后保留 Top-K。
+系统默认同时请求 Chroma 向量候选与 SQLite Chunk 的 BM25 候选，使用加权 RRF 生成统一候选，
+回查 SQLite 后按“同一文档 + 规范化正文”去除完全重复内容，再让聊天模型对已有 `chunk_id`
+排序，最后保留 Top-K。
 模型不得生成新编号；空数组、重复或未知编号会触发词法降级。默认最多向 Reranker 提交 12 个候选。
 
 ## 9. RAG 与 Agent 问答

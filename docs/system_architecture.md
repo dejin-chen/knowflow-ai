@@ -136,6 +136,7 @@ sequenceDiagram
     participant A as AgentChatService
     participant R as Agent Router
     participant S as SemanticSearchService
+    participant B as BM25
     participant Cache as SQLite 回答缓存
     participant C as Chroma
     participant DB as SQLite
@@ -153,11 +154,15 @@ sequenceDiagram
     else 缓存未命中
     A->>S: search(question, knowledge_base_id)
     S->>S: 问题 Embedding
-    S->>C: 按知识库过滤并查询 Top-K
+    S->>C: 按知识库过滤并查询向量候选
     C-->>S: chunk_id + distance + metadata
-    S->>DB: 回查 Chunk 正文和文档名
-    DB-->>S: 按 Chroma 排序返回来源
-    S->>L: 对去重后的候选执行结构化 LLM Rerank
+    S->>DB: 读取当前知识库 Chunk
+    DB-->>B: Chunk 正文
+    B-->>S: BM25 chunk_id + score + rank
+    S->>S: 加权 RRF 融合两路排名
+    S->>DB: 按融合 chunk_id 批量回查正文和文档名
+    DB-->>S: 返回来源并去重
+    S->>L: 对混合候选执行结构化 LLM Rerank
     L-->>S: 已有 chunk_id 的相关性顺序 + Token 用量
     opt 模型失败或输出非法
         S->>S: 降级为本地词法排序
@@ -326,8 +331,9 @@ Docker Compose 创建前后端两个容器。前端使用 Compose 服务名 `bac
 - 模型客户端设置请求超时和有限重试，连接或超时错误转换为 `503`。
 - 离线评估集用预期文件名和关键事实词标注，不依赖会随重切分变化的 Chunk ID。
 - 评估输出 Hit Rate@K、MRR 和关键词召回率，用于比较 Chunk、Top-K、Embedding 或 Rerank 调整前后的效果。
-- 100 题独立测试集上，LLM Rerank 将 HitRate@3 从 0.82 提升至 0.94、MRR 从 0.56 提升至 0.94。
-- LLM Rerank 平均增加约 2634 Token 和 3221 ms 延迟，P95 为 5713 ms；100 次中 1 次非法输出触发词法降级。
+- 100 题独立测试集上，BM25 + RRF 将候选命中率从 0.95 提升至 1.00，未调用 LLM 时将 HitRate@3 从 0.82 提升至 0.93。
+- 混合召回再结合 LLM Rerank 后，HitRate@3 和 MRR 均为 1.00；平均使用约 3402 Token、耗时 3192 ms，P95 为 4688 ms，本轮 100 次无降级。
+- 这些数字只描述固定测试集上的检索排序，不等于线上回答准确率。
 - 回答缓存记录有效条目、累计命中和基于首次模型用量估算的节省 Token。
 
 ## 12. 高频回答缓存
@@ -368,7 +374,8 @@ FastAPI 接口合同保持不变，可以将 Streamlit 替换为 React 或 Vue�
 
 - PDF 仅支持带文本层的文件，尚未实现 OCR 和结构化表格解析。
 - 未实现登录、多租户和细粒度知识库权限。
-- 已有结构化 LLM Rerank、词法降级和 100 题独立评估；尚未实现 BM25 + RRF 混合召回和 Cross-Encoder 本地重排。
+- 已有 BM25 + RRF 混合召回、结构化 LLM Rerank、词法降级和 100 题独立评估；尚未实现 Cross-Encoder 本地重排。
+- 当前 BM25 每次从 SQLite 动态构建语料，适合中小知识库演示；大规模场景应替换为 PostgreSQL 全文检索或专用搜索引擎。
 - SQLite + Chroma 适合本地演示，不代表高并发生产部署方案。
 - Router 是单次决策，不包含完整 ReAct 循环和自主反思。
 - 回答缓存是带 TTL 和两级 LRU 容量限制的精确匹配，不是可能误复用答案的语义缓存；

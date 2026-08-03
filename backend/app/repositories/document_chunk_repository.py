@@ -81,3 +81,16 @@ class DocumentChunkRepository:
             .where(DocumentChunk.id.in_(chunk_ids))
         )
         return list(self.db.execute(statement).all())
+
+    def list_with_document_by_knowledge_base(
+        self,
+        knowledge_base_id: int,
+    ) -> list[tuple[DocumentChunk, Document]]:
+        """按稳定顺序读取知识库语料，供 BM25 构建轻量关键词索引。"""
+        statement = (
+            select(DocumentChunk, Document)
+            .join(Document, Document.id == DocumentChunk.document_id)
+            .where(DocumentChunk.knowledge_base_id == knowledge_base_id)
+            .order_by(Document.id, DocumentChunk.chunk_index)
+        )
+        return list(self.db.execute(statement).all())

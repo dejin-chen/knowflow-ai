@@ -25,8 +25,12 @@ class RetrievedChunkRead(BaseModel):
     filename: str
     chunk_index: int
     content: str
-    distance: float
+    distance: float | None
     rerank_score: float | None = None
     vector_rank: int | None = None
+    bm25_rank: int | None = None
+    bm25_score: float | None = None
+    fusion_rank: int | None = None
+    fusion_score: float | None = None
     rerank_rank: int | None = None
     rerank_method: str | None = None

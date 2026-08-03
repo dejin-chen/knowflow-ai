@@ -111,15 +111,26 @@ class RagChatService:
         )
         retrieved_chunks = search_result.chunks
         # Rerank 会改变顺序，证据阈值仍使用候选中的最小原始向量距离。
-        best_distance = (
-            min(chunk.distance for chunk in retrieved_chunks)
-            if retrieved_chunks
-            else None
+        vector_distances = [
+            chunk.distance
+            for chunk in retrieved_chunks
+            if chunk.distance is not None
+        ]
+        best_distance = min(vector_distances) if vector_distances else None
+        has_bm25_evidence = any(
+            chunk.bm25_score is not None
+            and chunk.bm25_score >= settings.retrieval_bm25_evidence_threshold
+            for chunk in retrieved_chunks
         )
         insufficient_evidence = (
             not retrieved_chunks
-            or best_distance is not None
-            and best_distance > settings.retrieval_distance_threshold
+            or (
+                (
+                    best_distance is None
+                    or best_distance > settings.retrieval_distance_threshold
+                )
+                and not has_bm25_evidence
+            )
         )
 
         citations = self._build_citations(retrieved_chunks) if not insufficient_evidence else []
