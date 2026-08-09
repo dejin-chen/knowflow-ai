@@ -9,7 +9,7 @@ from app.db.base import Base
 class DocumentChunk(Base):
     """文档切分后的最小检索单元。
 
-    Chunk 正文保存在业务数据库，第四阶段会根据它生成 Embedding 并写入向量库。
+    Chunk 正文保存在业务数据库，索引链路据此生成 Embedding 并写入向量库。
     同时保留文档和知识库 ID，确保检索结果可以回溯到原始资料。
     """
 

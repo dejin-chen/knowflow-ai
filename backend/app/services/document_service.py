@@ -15,8 +15,8 @@ from app.services.knowledge_base_service import KnowledgeBaseService
 class DocumentService:
     """文档业务层。
 
-    第二阶段只保存原始文件和元信息，不做内容解析。
-    这样第三阶段可以专注于“从 storage_path 读取文件并切 Chunk”。
+    上传流程负责安全保存原始文件和元信息；解析、切分与索引由独立链路处理，
+    以便分别执行失败补偿和状态追踪。
     """
 
     allowed_extensions = {".txt", ".md", ".markdown", ".pdf"}

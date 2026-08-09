@@ -10,7 +10,7 @@ class Document(Base):
     """文档元信息表。
 
     这里不保存完整文档正文，只保存文件的来源、类型、大小和本地存储路径。
-    第三阶段解析文档时，会根据 storage_path 读取原始文件并切分成 chunks。
+    文档处理链路根据 storage_path 读取原始文件并切分成 chunks。
     """
 
     __tablename__ = "documents"

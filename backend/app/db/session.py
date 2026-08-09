@@ -9,7 +9,7 @@ from app.core.config import settings
 connect_args = {}
 if settings.database_url.startswith("sqlite"):
     # SQLite 默认限制连接只能在创建它的线程中使用。
-    # FastAPI 在测试和请求处理时可能跨线程访问，所以开发阶段需要关闭这个限制。
+    # FastAPI 的请求处理可能跨线程访问，因此需要关闭该限制。
     connect_args = {"check_same_thread": False}
 
 engine = create_engine(
