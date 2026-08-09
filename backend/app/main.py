@@ -23,11 +23,7 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """应用生命周期。
-
-    第一阶段没有业务表，但先保留建表入口。
-    后续新增 KnowledgeBase、Document 等模型后，启动时会自动创建 SQLite 表。
-    """
+    """初始化数据表、日志配置并管理应用生命周期。"""
     setup_logging()
     Base.metadata.create_all(bind=engine)
     logger.info("%s started", settings.app_name)
