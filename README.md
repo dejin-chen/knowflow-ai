@@ -1,6 +1,6 @@
 # KnowFlow AI
 
-[![KnowFlow AI CI](https://github.com/xibeiqiaozhilang-bot/knowflow-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/xibeiqiaozhilang-bot/knowflow-ai/actions/workflows/ci.yml)
+[![KnowFlow AI CI](https://github.com/dejin-chen/knowflow-ai/actions/workflows/ci.yml/badge.svg)](https://github.com/dejin-chen/knowflow-ai/actions/workflows/ci.yml)
 
 KnowFlow AI 是一个面向企业内部知识管理与可信问答场景的可部署 RAG 平台，支持将制度、
 流程、产品和技术文档转化为可检索、可引用、可评测的知识服务。
@@ -149,7 +149,7 @@ knowflow-ai/
 ### 1. 克隆项目
 
 ```powershell
-git clone https://github.com/xibeiqiaozhilang-bot/knowflow-ai.git
+git clone https://github.com/dejin-chen/knowflow-ai.git
 cd knowflow-ai
 ```
 
